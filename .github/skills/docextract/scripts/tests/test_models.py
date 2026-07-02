@@ -75,7 +75,8 @@ class TestTableElement:
 
 class TestImageElement:
     def test_full(self):
-        d = ImageElement("images/i.png", "png", 60, 40, {"order": 4}).to_dict()
+        # location はキーワードで渡す (フィールド順は width,height,ocr_text,location)
+        d = ImageElement("images/i.png", "png", 60, 40, location={"order": 4}).to_dict()
         assert d == {
             "type": "image",
             "file": "images/i.png",
@@ -84,6 +85,18 @@ class TestImageElement:
             "height": 40,
             "location": {"order": 4},
         }
+
+    def test_with_ocr_text(self):
+        d = ImageElement(
+            "images/i.png", "png", 60, 40, ocr_text="図1: 売上推移", location={"order": 4}
+        ).to_dict()
+        assert d["ocr_text"] == "図1: 売上推移"
+        assert d["location"] == {"order": 4}
+
+    def test_empty_ocr_text_omitted(self):
+        # 空文字の ocr_text は出力されない
+        d = ImageElement("i.png", "png", ocr_text="").to_dict()
+        assert "ocr_text" not in d
 
     def test_minimal(self):
         d = ImageElement("images/i.png", "jpg").to_dict()

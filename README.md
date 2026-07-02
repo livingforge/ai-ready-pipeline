@@ -24,8 +24,15 @@ pip install -r requirements.txt
 ```powershell
 python -m docextract report.docx -o output
 python -m docextract docs\*.pdf slides.pptx        # 複数・ワイルドカード可
+python -m docextract --dir 資料フォルダ -o output   # フォルダ内の対応ファイルを一括
+python -m docextract --dir 資料フォルダ -r -o output # サブフォルダも再帰的に
 python -m docextract report.pdf --no-ocr           # 画像内テキストの OCR を無効化
 ```
+
+`--dir/-d <フォルダ>`（複数指定可）で、そのフォルダ内の対応ファイル
+（`.docx` `.xlsx` `.xlsm` `.pptx` `.pdf`）をすべて処理します。`-r/--recursive` で
+サブフォルダも走査。位置引数にフォルダを渡しても同じ動作です（`~$` で始まる Office の
+一時ファイルは自動的に除外）。
 
 入力ファイルごとに `output/<ファイル名>_<拡張子>/` が作られ、以下が出力されます:
 
