@@ -84,16 +84,19 @@ def _get_table_engine(lang: str):
         from rapid_table import RapidTable
         from rapid_table.utils.typings import RapidTableInput
 
-        from .ocr import _RAPIDOCR_LANG
+        from .ocr import _get_rapidocr_engine
 
-        cfg = RapidTableInput(
-            use_ocr=True,
-            ocr_params={
-                "Rec.lang_type": _RAPIDOCR_LANG.get(lang, lang),
-                "Global.log_level": "error",
-            },
-        )
-        _table_engine = RapidTable(cfg)
+        # RapidTable は use_ocr=True で生成すると内部に *もう1つ* RapidOCR
+        # (det/cls/rec の3モデル) を読み込む。これは ocr_image が使うエンジンと
+        # 同一言語の完全な重複で、常駐メモリを二重に消費する主因になる。
+        # そこで use_ocr=False で構築して内部 OCR を作らせず、生成後に共有
+        # インスタンスを注入したうえで OCR 経路だけ有効化する。これで RapidOCR
+        # 1 セット分の常駐メモリを丸ごと削減できる (表セルの文字認識精度は
+        # 同一エンジンを使うため不変)。
+        engine = RapidTable(RapidTableInput(use_ocr=False))
+        engine.ocr_engine = _get_rapidocr_engine(lang)
+        engine.cfg.use_ocr = True
+        _table_engine = engine
     return _table_engine
 
 
