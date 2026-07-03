@@ -1,6 +1,17 @@
 """Excel (.xlsx) の抽出器。
 
-各シートの使用範囲を 1 つの表として抽出する(末尾の空行・空列は除去)。
+各シートから「表領域」を検出して抽出する。
+
+Excel の使用範囲 (used range) は書式だけのセルや削除済みデータの残骸で
+実データより大きく膨らむことが多く、そのまま 2 次元配列にすると大量の
+空文字が混じる。そこで非空セルの連結成分 (connected components) から
+表領域を検出し、領域ごとに 1 つの表として抽出する:
+
+- 空白ギャップ 1 行/列以内で隣接するセルは同じ表とみなす
+  (表中のスペーサー行で分断されないため)
+- 2 行/列以上の空白で離れたセル群は別の表として分割する
+- 各表の内部でも完全な空行・空列は除去する
+
 シートに埋め込まれた画像も取り出す。
 """
 
@@ -12,6 +23,9 @@ from openpyxl import load_workbook
 
 from ..models import ExtractionResult, ImageElement, TableElement
 from .base import ImageSaver
+
+# 同じ表とみなす空白ギャップの許容幅 (行/列数)
+_GAP = 1
 
 
 def extract_xlsx(path: Path, saver: ImageSaver) -> ExtractionResult:
@@ -29,10 +43,18 @@ def extract_xlsx(path: Path, saver: ImageSaver) -> ExtractionResult:
     }
 
     for ws in wb.worksheets:
-        rows = _sheet_to_rows(ws)
-        if rows:
+        grid = _sheet_to_grid(ws)
+        for top, left, bottom, right in _find_table_regions(grid):
+            rows = _region_to_rows(grid, top, left, bottom, right)
+            cell_range = (
+                f"{_col_letter(left + 1)}{top + 1}:"
+                f"{_col_letter(right + 1)}{bottom + 1}"
+            )
             result.elements.append(
-                TableElement(rows=rows, location={"sheet": ws.title})
+                TableElement(
+                    rows=rows,
+                    location={"sheet": ws.title, "range": cell_range},
+                )
             )
         for img in getattr(ws, "_images", []):
             try:
@@ -51,29 +73,86 @@ def extract_xlsx(path: Path, saver: ImageSaver) -> ExtractionResult:
     return result
 
 
-def _sheet_to_rows(ws) -> list[list[str]]:
-    rows: list[list[str]] = []
-    for row in ws.iter_rows(values_only=True):
-        rows.append(["" if v is None else str(v) for v in row])
-    # 末尾の空行を除去
-    while rows and all(c == "" for c in rows[-1]):
-        rows.pop()
-    # 末尾の空列を除去
-    while rows and all(r and r[-1] == "" for r in rows):
-        for r in rows:
-            r.pop()
-    return rows
+def _cell_to_str(v) -> str:
+    """セル値を文字列化する。None と空白のみの値は空とみなす。"""
+    if v is None:
+        return ""
+    s = str(v)
+    return s if s.strip() else ""
+
+
+def _sheet_to_grid(ws) -> list[list[str]]:
+    return [[_cell_to_str(v) for v in row] for row in ws.iter_rows(values_only=True)]
+
+
+def _find_table_regions(
+    grid: list[list[str]],
+) -> list[tuple[int, int, int, int]]:
+    """非空セルの連結成分から表領域の外接矩形を求める。
+
+    空白ギャップ _GAP 以内 (チェビシェフ距離 _GAP+1 以内) のセル同士を
+    連結とみなして flood fill し、成分ごとの外接矩形を返す。
+    戻り値は 0 始まりの (top, left, bottom, right) を位置順に並べたもの。
+    """
+    filled = {
+        (r, c)
+        for r, row in enumerate(grid)
+        for c, v in enumerate(row)
+        if v
+    }
+    reach = _GAP + 1
+    offsets = [
+        (dr, dc)
+        for dr in range(-reach, reach + 1)
+        for dc in range(-reach, reach + 1)
+        if dr or dc
+    ]
+    regions: list[tuple[int, int, int, int]] = []
+    seen: set[tuple[int, int]] = set()
+    for start in filled:
+        if start in seen:
+            continue
+        seen.add(start)
+        stack = [start]
+        top, left = start
+        bottom, right = start
+        while stack:
+            r, c = stack.pop()
+            top = min(top, r)
+            bottom = max(bottom, r)
+            left = min(left, c)
+            right = max(right, c)
+            for dr, dc in offsets:
+                nb = (r + dr, c + dc)
+                if nb in filled and nb not in seen:
+                    seen.add(nb)
+                    stack.append(nb)
+        regions.append((top, left, bottom, right))
+    return sorted(regions)
+
+
+def _region_to_rows(
+    grid: list[list[str]], top: int, left: int, bottom: int, right: int
+) -> list[list[str]]:
+    """外接矩形から行列を切り出し、内部の完全な空行・空列を除去する。"""
+    rows = [row[left : right + 1] for row in grid[top : bottom + 1]]
+    rows = [r for r in rows if any(r)]
+    keep = [j for j in range(right - left + 1) if any(r[j] for r in rows)]
+    return [[r[j] for j in keep] for r in rows]
+
+
+def _col_letter(n: int) -> str:
+    """1 始まりの列番号を A1 形式の列文字に変換する。"""
+    col = ""
+    while n:
+        n, rem = divmod(n - 1, 26)
+        col = chr(65 + rem) + col
+    return col
 
 
 def _anchor_cell(img) -> str | None:
     try:
         anc = img.anchor._from
-        # 0 始まりの列番号を A1 形式に変換
-        col = ""
-        n = anc.col + 1
-        while n:
-            n, rem = divmod(n - 1, 26)
-            col = chr(65 + rem) + col
-        return f"{col}{anc.row + 1}"
+        return f"{_col_letter(anc.col + 1)}{anc.row + 1}"
     except Exception:
         return None
