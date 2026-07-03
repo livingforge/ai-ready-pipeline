@@ -28,6 +28,7 @@ import re
 import sys
 from pathlib import Path
 
+from docextract import config as _config
 from docextract import obs as _obs
 from docextract import paths as _paths
 
@@ -41,7 +42,10 @@ from .store import (
 
 
 def _load(args: argparse.Namespace) -> Library:
-    return Library.load(args.store, args.doctypes)
+    lib = Library.load(args.store, args.doctypes)
+    # 登録時 preview の長さを config.json (preview_chars) で差し替える。
+    lib.preview_chars = args.cfg["preview_chars"]
+    return lib
 
 
 def _load_facts(args: argparse.Namespace) -> FactStore:
@@ -52,10 +56,44 @@ def _load_facts(args: argparse.Namespace) -> FactStore:
 # 人が目視したいときだけ --pretty で indent=2 に戻す。main() が実行時に設定する。
 _PRETTY = False
 
+# 数値ガード。main() が config.json (env DOCEXTRACT_HOME 準拠) から実行時に設定する。
+# _CEILING: --json 出力の文字数上限。超えると拒否する (0 で無効)。ホスト (Claude
+# Code の Bash 出力 30,000 字・Copilot のコンテキスト枯渇) が stdout を黙って切り
+# 詰めて情報欠落するのを、その手前で検知して止めるための番人。
+# _FORCE_STDOUT: --stdout。上限を承知で全出力を強制する脱出ハッチ。
+_CEILING = _config.DEFAULTS["ceiling_chars"]
+_FORCE_STDOUT = False
 
-def _emit(obj, as_json: bool, human) -> None:
+
+def _refuse_oversize(size: int, hint: str | None) -> None:
+    """stdout が上限を超えたとき、絞り方を案内して終了する (fail-closed)。
+
+    全出力すると呼び出し側 (LLM/エージェント) のコンテキストがホスト側で黙って
+    切り詰められ、欠落したことにすら気づけない。手前で止め、どう絞るか・強制する
+    にはどうするかを stderr で必ず案内する。上限は config.json で変更できる。
+    """
+    print(
+        f"[guard] 出力 {size:,} 文字が上限 {_CEILING:,} 文字を超えます"
+        f" (LLM/エージェントの stdout はこの辺りで切り詰められ、静かに欠落します)。\n"
+        f"        {hint or '対象を絞るか、全出力を強制するなら --stdout を付けてください。'}\n"
+        f'        上限は config.json の "ceiling_chars" で変更できます (0 で無効化)。',
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
+def _emit(obj, as_json: bool, human, *, hint: str | None = None) -> None:
+    """結果を出力する。``--json`` の場合のみ数値ガード (上限) を適用する。
+
+    ``hint`` はコマンド固有の「絞り方」の案内 (例: text なら --max-chars を下げる)。
+    人向け出力 (対話端末想定) はガードしない — 端末は自前でスクロールでき、欠落
+    しないため。エージェントは常に ``--json`` を使うので、そこだけ守れば十分。
+    """
     if as_json:
-        print(json.dumps(obj, ensure_ascii=False, indent=2 if _PRETTY else None))
+        s = json.dumps(obj, ensure_ascii=False, indent=2 if _PRETTY else None)
+        if _CEILING and not _FORCE_STDOUT and len(s) > _CEILING:
+            _refuse_oversize(len(s), hint)
+        print(s)
     else:
         human(obj)
 
@@ -104,10 +142,14 @@ def cmd_init(args):
     fs = _load_facts(args)
     fs.save()
     fs.save_item_types()
+    # 数値ガードの既定値を config.json に敷く (既存は上書きせず利用者の編集を守る)。
+    config_written = _config.write_defaults(args.config)
     _emit(
         {
             "store": str(lib.path),
             "facts": str(fs.path),
+            "config": str(args.config),
+            "config_created": config_written,
             "doctypes": lib.doctypes,
             "item_types": fs.item_types,
             "documents": len(lib.documents),
@@ -115,7 +157,9 @@ def cmd_init(args):
         args.json,
         lambda o: print(
             f"初期化しました。\n  ストア: {o['store']}\n  ファクト: {o['facts']}\n"
-            f"  文書種別: {', '.join(o['doctypes'])}\n"
+            f"  設定: {o['config']}"
+            + ("" if o["config_created"] else " (既存を保持)")
+            + f"\n  文書種別: {', '.join(o['doctypes'])}\n"
             f"  ファクト種別: {', '.join(o['item_types'])}\n"
             f"  登録済み文書: {o['documents']} 件"
         ),
@@ -124,7 +168,9 @@ def cmd_init(args):
 
 def cmd_prep(args):
     lib = _load(args)
-    payload = lib.prep(args.target, max_chars=args.max_chars)
+    # 明示 > config.json > 組み込み既定。未指定 (None) のとき config 値を使う。
+    max_chars = args.max_chars if args.max_chars is not None else args.cfg["prep_max_chars"]
+    payload = lib.prep(args.target, max_chars=max_chars)
 
     def human(o):
         state = "分類済み" if o["already_classified"] else "未分類"
@@ -132,7 +178,7 @@ def cmd_prep(args):
         print(f"文書種別の候補: {', '.join(o['doctypes'])}")
         print(f"次の一手: {o['next_action']}")
 
-    _emit(payload, args.json, human)
+    _emit(payload, args.json, human, hint="--max-chars を下げるか --stdout で全出力")
 
 
 def cmd_add(args):
@@ -169,13 +215,20 @@ def cmd_set_doctype(args):
 def cmd_get(args):
     lib = _load(args)
     doc = lib.get(args.id)
-    _emit(doc, args.json, lambda o: print(json.dumps(o, ensure_ascii=False, indent=2)))
+    _emit(
+        doc,
+        args.json,
+        lambda o: print(json.dumps(o, ensure_ascii=False, indent=2)),
+        hint="本文だけなら text、全体を強制するなら --stdout",
+    )
 
 
 def cmd_text(args):
     lib = _load(args)
-    # --max-chars 0 は「全文」の明示指定。既定は上限つきで巨大文書の全文直流を防ぐ。
-    max_chars = None if args.max_chars == 0 else args.max_chars
+    # 明示 > config.json > 組み込み既定。--max-chars 0 は「全文」の明示指定で、
+    # 既定は上限つきにして巨大文書の全文直流を防ぐ。
+    max_chars = args.max_chars if args.max_chars is not None else args.cfg["text_max_chars"]
+    max_chars = None if max_chars == 0 else max_chars
     doc = lib.extract_text(args.id, max_chars=max_chars, offset=args.offset)
 
     def human(o):
@@ -188,7 +241,7 @@ def cmd_text(args):
                 file=sys.stderr,
             )
 
-    _emit(doc, args.json, human)
+    _emit(doc, args.json, human, hint="--max-chars を下げる・--offset で分割・--stdout で強制")
 
 
 def cmd_list(args):
@@ -202,6 +255,7 @@ def cmd_list(args):
             or [print("  " + _doc_line(d)) for d in o]
             or (print("  (なし)") if not o else None)
         ),
+        hint="query で --doctype/--text で絞る、または --stdout で全出力",
     )
 
 
@@ -214,6 +268,7 @@ def cmd_query(args):
         lambda o: (
             print(f"該当 {len(o)} 件:") or [print("  " + _doc_line(d)) for d in o]
         ),
+        hint="--doctype/--text でさらに絞る、または --stdout で全出力",
     )
 
 
@@ -308,7 +363,9 @@ def cmd_sync(args):
 # ── 横断検索 (corpus-qa): 出典付きグラウンデッド検索 ─────────────
 def cmd_search(args):
     lib = _load(args)
-    hits = lib.search(args.term, doc_id=args.doc, max_hits=args.max_hits)
+    # 明示 > config.json > 組み込み既定。
+    max_hits = args.max_hits if args.max_hits is not None else args.cfg["search_max_hits"]
+    hits = lib.search(args.term, doc_id=args.doc, max_hits=max_hits)
 
     def human(o):
         print(f"「{args.term}」に一致 {len(o)} 件 (関連度順):")
@@ -317,7 +374,7 @@ def cmd_search(args):
             print(f"  {h['doc_id']} [{h['kind']}] score={h['score']} {loc}")
             print(f"    {h['snippet']}")
 
-    _emit(hits, args.json, human)
+    _emit(hits, args.json, human, hint="--max-hits を下げる・--doc で絞る・--stdout で強制")
 
 
 # ── 仕様の洗い出し (spec-extractor): ファクト操作 ────────────────
@@ -376,6 +433,7 @@ def cmd_facts(args):
             print(f"ファクト {len(o)} 件:") or [print("  " + _fact_line(it)) for it in o]
             or (print("  (なし)") if not o else None)
         ),
+        hint="--doc/--type/--text で絞る、または --stdout で全出力",
     )
 
 
@@ -511,6 +569,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--item-types-file", default=argparse.SUPPRESS, help="ファクト種別の定義ファイル"
     )
     common.add_argument(
+        "--config",
+        default=argparse.SUPPRESS,
+        help="数値ガード等の設定ファイル (既定 <home>/config.json)",
+    )
+    common.add_argument(
+        "--stdout",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help=(
+            "出力の数値ガード (config.json の ceiling_chars) を無視して全出力する。"
+            "export/facts-export では -o 省略時でも標準出力へ全出力する"
+        ),
+    )
+    common.add_argument(
         "--run-id",
         default=argparse.SUPPRESS,
         help=(
@@ -531,7 +603,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("prep", "取り込み準備: 必要なら登録し、種別候補+本文抜粋を1回で返す")
     sp.add_argument("target", help="result.json のパス、または登録済み文書 ID")
-    sp.add_argument("--max-chars", type=int, default=8000, help="本文抜粋の最大文字数 (既定 8000)")
+    sp.add_argument(
+        "--max-chars",
+        type=int,
+        default=None,
+        help="本文抜粋の最大文字数 (既定は config.json の prep_max_chars=8000)",
+    )
     sp.set_defaults(func=cmd_prep)
 
     sp = add("add", "docextract の result.json を取り込み登録")
@@ -554,8 +631,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--max-chars",
         type=int,
-        default=20000,
-        help="出力する最大文字数 (既定 20000。0 で全文。巨大文書の全文直流を防ぐ)",
+        default=None,
+        help=(
+            "出力する最大文字数 (既定は config.json の text_max_chars=20000。0 で全文。"
+            "巨大文書の全文直流を防ぐ)"
+        ),
     )
     sp.add_argument(
         "--offset",
@@ -587,11 +667,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("export", "集約 JSON 全体を出力")
     sp.add_argument("-o", "--output", help="書き出し先ファイル (推奨。省略時は要 --stdout)")
-    sp.add_argument(
-        "--stdout",
-        action="store_true",
-        help="-o 省略時でも標準出力へ全出力する (非対話では既定で拒否される)",
-    )
+    # --stdout は common で定義済み (非対話で -o 省略時の全出力を許可)。
     sp.set_defaults(func=cmd_export)
 
     sp = add("remove", "文書を削除")
@@ -617,7 +693,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--doc", help="特定の文書 ID に絞る")
     sp.add_argument(
-        "--max-hits", type=int, default=50, help="返す最大ヒット数 (関連度順の上位。既定 50)"
+        "--max-hits",
+        type=int,
+        default=None,
+        help="返す最大ヒット数 (関連度順の上位。既定は config.json の search_max_hits=50)",
     )
     sp.set_defaults(func=cmd_search)
 
@@ -652,11 +731,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("facts-export", "ファクト集約 JSON 全体を出力")
     sp.add_argument("-o", "--output", help="書き出し先ファイル (推奨。省略時は要 --stdout)")
-    sp.add_argument(
-        "--stdout",
-        action="store_true",
-        help="-o 省略時でも標準出力へ全出力する (非対話では既定で拒否される)",
-    )
+    # --stdout は common で定義済み (非対話で -o 省略時の全出力を許可)。
     sp.set_defaults(func=cmd_facts_export)
 
     sp = add("item-types", "ファクト種別の表示・追加・削除")
@@ -683,9 +758,18 @@ def main(argv: list[str] | None = None) -> int:
     args.doctypes = getattr(args, "doctypes", str(_paths.doctypes_path()))
     args.facts = getattr(args, "facts", str(_paths.facts_path()))
     args.item_types_file = getattr(args, "item_types_file", str(_paths.item_types_path()))
+    args.config = getattr(args, "config", str(_paths.config_path()))
+    args.stdout = getattr(args, "stdout", False)
     args.json = getattr(args, "json", False)
-    global _PRETTY
+    # 数値ガードの設定を読み込み、各ハンドラと出力ガードへ反映する。
+    # 優先順位: CLI フラグ > config.json > 組み込み既定 (ハンドラ側で解決)。
+    args.cfg = _config.load(args.config)
+    global _PRETTY, _CEILING, _FORCE_STDOUT, _LIST_PREVIEW_CHARS, _FACT_EVIDENCE_CHARS
     _PRETTY = getattr(args, "pretty", False)
+    _CEILING = args.cfg["ceiling_chars"]
+    _FORCE_STDOUT = args.stdout
+    _LIST_PREVIEW_CHARS = args.cfg["list_preview_chars"]
+    _FACT_EVIDENCE_CHARS = args.cfg["fact_evidence_chars"]
     # docextract から引き継いだ相関 ID (環境変数 or --run-id) で監査ログを残す。
     # これで docextract→docagent の一連の処理を同じ run_id で再構成できる。
     log = _obs.open_run("docagent.cli", getattr(args, "run_id", None))

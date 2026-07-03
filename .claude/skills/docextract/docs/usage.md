@@ -160,6 +160,30 @@ python .claude/skills/docextract/scripts/run_docextract.py --dir <フォルダ> 
 `.docextract` の場所を差し替えられる。バージョン管理から外す場合は
 `.docextract/` を `.gitignore` に加える。
 
+## 数値ガードと設定ファイル（`<home>/config.json`）
+
+docagent の参照系コマンドは、LLM/エージェントへ渡す標準出力が肥大化しないよう
+**数値ガード**を持つ。既定値は `<home>/config.json`（`DOCEXTRACT_HOME` 準拠、`init`
+が生成）で一元管理し、`doctypes.json` と同様に**利用者が編集できる**。優先順位は
+**CLI フラグ（明示） > config.json > 組み込み既定**。
+
+| キー | 既定 | 意味 |
+|------|------|------|
+| `ceiling_chars` | 30000 | `--json` 出力の文字数上限。超えると**拒否して絞り方を案内**する（`0` で無効化）。Claude Code の Bash 出力既定（30,000 字で中央切り詰め）に一致 |
+| `text_max_chars` | 20000 | `text` の既定最大文字数（`0` で全文） |
+| `prep_max_chars` | 8000 | `prep` が返す本文抜粋の最大文字数 |
+| `search_max_hits` | 50 | `search` が返す最大ヒット数 |
+| `list_preview_chars` | 200 | `list` / `query` の preview 短縮長 |
+| `fact_evidence_chars` | 200 | `facts` 一覧の evidence 短縮長 |
+| `preview_chars` | 600 | 登録時に result.json から作る preview の長さ |
+
+`ceiling_chars` を超える出力になったコマンドは、そのままではホスト（Claude Code の
+Bash 出力／GitHub Copilot のコンテキスト）で**黙って切り詰められ欠落する**ため、手前で
+`exit 2` して stderr に「どう絞るか（`--max-chars` を下げる・`--offset` で分割・`--doc`
+や `--type` で絞る）／全出力を強制するには `--stdout`」を案内する。GitHub Copilot 等の
+より狭いツールを主対象にする場合は、`ceiling_chars` を 16000 程度へ下げると安全側に倒せる。
+別の設定ファイルを使うときは `--config <パス>` で明示指定できる。
+
 ## OCR バックエンドの選択
 
 | backend | エンジン | 特徴 |

@@ -169,3 +169,91 @@ def test_facts_evidence_trimmed_by_default(store, tmp_path, capsys):
     full = json.loads(capsys.readouterr().out.strip())
     assert full[0]["evidence"] == long_ev
     assert "evidence_truncated" not in full[0]
+
+
+# ── ⑥ 数値ガード: --json 出力が上限を超えたら拒否し、絞り方を案内 ─────────
+def test_text_full_refused_over_ceiling(store, tmp_path, capsys):
+    # 既定上限 (30,000 字) を超える文書の全文 (--max-chars 0) は拒否される。
+    doc_id = _add_doc(store, tmp_path, "huge.docx", ["あ" * 40000])
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as exc:
+        store("text", doc_id, "--max-chars", "0", "--json")
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "上限" in err and "--max-chars" in err  # 絞り方を案内する
+
+
+def test_stdout_flag_bypasses_guard(store, tmp_path, capsys):
+    doc_id = _add_doc(store, tmp_path, "huge.docx", ["あ" * 40000])
+    capsys.readouterr()
+    store("text", doc_id, "--max-chars", "0", "--json", "--stdout")
+    rec = json.loads(capsys.readouterr().out.strip())
+    assert rec["returned_chars"] == 40000  # ガードを迂回して全出力
+
+
+def _write_config(tmp_path: Path, **values) -> Path:
+    cfg = tmp_path / "myconfig.json"
+    cfg.write_text(json.dumps(values, ensure_ascii=False), encoding="utf-8")
+    return cfg
+
+
+# ── ⑦ config.json: 上限と既定値を利用者が変更できる ──────────────────
+def test_config_file_lowers_ceiling(store, tmp_path, capsys):
+    # ceiling_chars を極小にすると、小さな list 出力でも拒否される。
+    cfg = _write_config(tmp_path, ceiling_chars=50)
+    _add_doc(store, tmp_path, "a.docx", ["x" * 400])
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as exc:
+        store("--config", str(cfg), "list", "--json")
+    assert exc.value.code == 2
+    assert "ceiling_chars" in capsys.readouterr().err  # 変更方法を案内
+
+
+def test_config_ceiling_zero_disables_guard(store, tmp_path, capsys):
+    cfg = _write_config(tmp_path, ceiling_chars=0)
+    _add_doc(store, tmp_path, "huge.docx", ["あ" * 40000])
+    capsys.readouterr()
+    store("--config", str(cfg), "text", "huge_docx", "--max-chars", "0", "--json")
+    rec = json.loads(capsys.readouterr().out.strip())
+    assert rec["returned_chars"] == 40000  # 0 で無効化
+
+
+def test_config_overrides_text_default(store, tmp_path, capsys):
+    # text_max_chars を config で下げると、--max-chars 未指定の既定が変わる。
+    cfg = _write_config(tmp_path, text_max_chars=10)
+    doc_id = _add_doc(store, tmp_path, "a.docx", ["b" * 100])
+    capsys.readouterr()
+    store("--config", str(cfg), "text", doc_id, "--json")
+    rec = json.loads(capsys.readouterr().out.strip())
+    assert rec["returned_chars"] == 10
+    assert rec["truncated"] is True
+
+
+def test_explicit_flag_beats_config(store, tmp_path, capsys):
+    # 明示フラグは config より優先される。
+    cfg = _write_config(tmp_path, text_max_chars=10)
+    doc_id = _add_doc(store, tmp_path, "a.docx", ["b" * 100])
+    capsys.readouterr()
+    store("--config", str(cfg), "text", doc_id, "--max-chars", "25", "--json")
+    rec = json.loads(capsys.readouterr().out.strip())
+    assert rec["returned_chars"] == 25
+
+
+def test_init_writes_config_defaults(store, tmp_path):
+    # fixture の init 時に <home>/config.json が既定値で作られている。
+    cfg_path = tmp_path / "home" / "config.json"
+    assert cfg_path.exists()
+    data = json.loads(cfg_path.read_text(encoding="utf-8"))
+    assert data["ceiling_chars"] == 30000
+    assert data["text_max_chars"] == 20000
+
+
+def test_invalid_config_falls_back_to_defaults(store, tmp_path, capsys):
+    # 不正値 (負数) は既定にフォールバックし、理由を stderr に出す。
+    cfg = _write_config(tmp_path, ceiling_chars=-5)
+    _add_doc(store, tmp_path, "a.docx", ["hi"])
+    capsys.readouterr()
+    store("--config", str(cfg), "list", "--json")
+    captured = capsys.readouterr()
+    assert "ceiling_chars" in captured.err  # 不正値の警告
+    json.loads(captured.out.strip())  # 既定 30000 で通る

@@ -6,6 +6,7 @@ docextract の抽出結果 (``output/``) と docagent の集約ストア (``stor
 ドット始まりの固有名を1つだけ作る方針 (``.pytest_cache`` 等と同じ発想)。
 
     .docextract/
+      config.json        <- 数値ガード等の既定パラメータ (利用者が編集できる)
       output/            <- docextract の抽出結果 (<id>/result.json)
         index.json       <- 抽出マニフェスト (id で索引する台帳)
       store/
@@ -35,6 +36,16 @@ DEFAULT_HOME = ".docextract"
 def home_dir() -> Path:
     """データ基点ディレクトリ (env ``DOCEXTRACT_HOME``、既定 ``.docextract``)。"""
     return Path(os.environ.get(ENV_HOME) or DEFAULT_HOME)
+
+
+def config_path() -> Path:
+    """数値ガード等の既定パラメータを管理する設定ファイル (``<home>/config.json``)。
+
+    LLM/エージェントへ渡す stdout の上限 (``ceiling_chars``) や各コマンドの既定
+    (``text_max_chars`` 等) をここで一元管理し、利用者が編集できる。読み込みと
+    既定値は :mod:`docextract.config` が担う。
+    """
+    return home_dir() / "config.json"
 
 
 def output_dir() -> Path:

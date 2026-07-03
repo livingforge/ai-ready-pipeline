@@ -74,6 +74,9 @@ class Library:
     version: int = SCHEMA_VERSION
     doctypes: list[str] = field(default_factory=default_doctypes)
     documents: list[dict[str, Any]] = field(default_factory=list)
+    # 登録時に result.json から作る preview の長さ。CLI が config.json の
+    # preview_chars を反映して差し替える (既定 600)。
+    preview_chars: int = 600
 
     # ── 入出力 ────────────────────────────────────────────────
     @classmethod
@@ -290,7 +293,7 @@ class Library:
             "result_path": str(result_path).replace("\\", "/"),
             "metadata": result.get("metadata", {}),
             "stats": result.get("summary", {}),
-            "preview": _build_preview(result),
+            "preview": _build_preview(result, self.preview_chars),
             "doctype": None,
             "added_at": existing["added_at"] if existing else _now(),
             "updated_at": _now(),
