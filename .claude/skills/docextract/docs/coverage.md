@@ -3,14 +3,16 @@
 テスト・評価が「何を・どの視点で」検証しているかを **視点分離**で設計し、
 併せて **未評価サーフェス（何をテストしていないか）** を明示する文書。
 実装の自己検証（`scripts/tests/`）と評価ハーネス（`scripts/eval/`）の役割分担も
-ここで定義する。
+ここで定義する。なお **評価ハーネス（`scripts/eval/`）はリポジトリ限定の開発用資産で、
+配布バンドル（`.claude/` `.github/` および zip）には同梱しない**。バンドル同梱の
+`tests/test_eval.py` は eval 資産が無ければ自動 skip する。
 
 ## 二層構成
 
 | 層 | 場所 | 役割 | 視点 |
 |---|---|---|---|
 | ユニット自己検証 | `scripts/tests/` (pytest) | 自コードを exercise し境界挙動を固定 | 正常系・境界・失敗系・劣化系 |
-| 評価ハーネス | `scripts/eval/` (`run_eval.py` + `cases.jsonl`) | 合否基準を data として宣言し列挙実行 | end-to-end の出力契約 |
+| 評価ハーネス（配布非同梱） | `scripts/eval/` (`run_eval.py` + `cases.jsonl`) | 合否基準を data として宣言し列挙実行 | end-to-end の出力契約 |
 
 ## 視点別カバレッジ
 
