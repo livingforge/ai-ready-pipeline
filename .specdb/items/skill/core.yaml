@@ -1,67 +1,28 @@
-# スキル — 配布される 2 スキルと、その同梱物・除外物・従う規則
+# スキル — Claude Code / GitHub Copilot に配布されるエージェントスキル
 
-- id: skill-docextract
-  status: approved
+- id: sk-docextract
   name: docextract
-  src_dir: skill-src/docextract
-  source:
-    doc: scripts/build_skill.py
-    location: { symbol: build_skill }
-  bundles:
-    - module: mod-skill-scripts
-      dest: scripts
-      exclude: eval
-      note: 起動スクリプト一式。eval/ は除外して展開する。
-    - module: mod-docextract
-      dest: scripts/docextract
-    - module: mod-docagent
-      dest: scripts/docagent
-    - module: mod-tests
-      dest: scripts/tests
-      note: >-
-        テスト側の sys.path ブートストラップは「親 = docextract パッケージのある場所」
-        前提で、リポジトリとバンドルの両方で成立する。
-    - module: mod-requirements
-      dest: scripts/requirements.txt
-    - module: mod-requirements-lock
-      dest: scripts/requirements.lock
-      note: 存在する場合のみ同梱（rule-lock-preferred）。
-  excludes:
-    - module: mod-eval
-      reason: >-
-        開発時専用の QA 資産のため配布バンドルには同梱しない。同梱テスト test_eval は
-        eval 未検出時に自動 skip するのでバンドル側テストは壊れない。
-      source:
-        doc: scripts/build_skill.py
-        location: { symbol: build_skill }
-        evidence: "eval/ (評価ハーネス) は開発時専用の QA 資産のため配布バンドルには同梱しない。"
-  rules:
-    - rule-md-assembly
-    - rule-skill-dir-subst
-    - rule-pycache-excl
-    - rule-lock-preferred
-
-- id: skill-specdb
+  purpose: >-
+    Office 文書 (Word / Excel / PowerPoint) と PDF を解析し、テキスト・表・画像を
+    抽出して出典付きの構造化 JSON として出力する文書抽出スキル。
+  runtime: Python 3.10+（共有仮想環境 .venv、起動スクリプト経由で自動セットアップ）
   status: approved
-  name: specdb
-  src_dir: skill-src/specdb
+  rules: [dr-01, dr-05]
   source:
-    doc: scripts/build_skill.py
-    location: { symbol: build_specdb_skill }
-    evidence: "ツール (scripts/) と雛形データ (scaffold/) を分けて同梱する。"
-  bundles:
-    - module: mod-specdb-engine
-      dest: scripts
-      note: engine.py / generate.py / diff.py の 3 ファイルを個別コピー。
-    - module: mod-specdb-tests
-      dest: scripts/tests
-    - module: mod-specdb-requirements
-      dest: scripts/requirements.txt
-    - module: mod-specdb-scaffold
-      dest: scaffold
-      exclude: "*.py, tests, out"
-      note: ツール・テスト・生成物を除いた雛形データのみ。利用者がコピーして育てる。
-  rules:
-    - rule-md-assembly
-    - rule-skill-dir-subst
-    - rule-pycache-excl
+    doc: README.md
+    location: { section: "冒頭" }
+    evidence: "Office 文書 (Word / Excel / PowerPoint) と PDF を解析し、テキスト・表・画像を抽出して JSON 形式で出力するツールです。"
+
+- id: sk-specdb
+  name: specdb
+  purpose: >-
+    仕様アイテムと関係を YAML のデータ（正本）として保存し、設計書はそこから
+    生成されるビューにする仕様データ管理スキル。メタモデル駆動で機械検証・
+    文書生成・ベースライン差分・グラフ可視化を提供する。
+  runtime: Python 3.10+（依存は PyYAML + Jinja2 のみ）
+  status: approved
+  rules: [dr-01, dr-03, dr-05, dr-06]
+  source:
+    doc: specdb/README.md
+    location: { section: "冒頭" }
+    evidence: "「文書を保存する」のではなく「仕様アイテムと関係をデータ（正本）として保存し、設計書はそこから生成されるビューにする」構想の実証。"

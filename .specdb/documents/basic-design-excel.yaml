@@ -1,0 +1,22 @@
+# 文書定義: システム基本設計書（伝統的な日本の Excel 設計書風・自己完結 HTML）
+#
+# title / output / template 以外のキーはそのまま `doc` としてテンプレートへ渡る。
+title: システム基本設計書（DocExtract 資料活用基盤）
+output: 基本設計書_DocExtract資料活用基盤.html
+template: basic-design-excel.html.j2
+doc_no: SD-DEX-001
+version: "1.0"
+preface:
+  purpose: >-
+    本書は、設計書・仕様書等のプロジェクト資料を AI と後工程が機械的に利用できる
+    形式へ引き上げる「DocExtract 資料活用基盤」の基本設計を定める。基盤は
+    文書抽出スキル (docextract)、資料活用エージェント (doc-indexer /
+    spec-extractor / corpus-qa)、仕様データ管理スキル (specdb) から成る。
+  scope: >-
+    対象範囲は、機能一覧、構成要素（スキル・エージェント・ソースモジュール）の
+    仕様、工程間で受け渡すデータ成果物の設計、全体を貫く設計方針、および外部
+    ライブラリへの依存とする。個々のクラス・関数の詳細設計は対象外とする。
+  premise: >-
+    記載内容の正本は仕様データ (.specdb/ の items/ + relations/) であり、本書は
+    そこから自動生成されたビューである。本書を直接編集せず、仕様変更はデータを
+    修正して再生成すること。各記載の出典（元資料・箇所・原文）は付録に集約する。

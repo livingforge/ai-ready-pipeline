@@ -1,23 +1,62 @@
-# エージェント — agent-src/ の 3 エージェント。includes は body.md 内の
-# {{include:...}} の出現順（ordered な関係）。
+# エージェント — 資料活用の各工程を担うカスタムエージェント (.claude/agents/)
 
-- id: agent-corpus-qa
-  status: approved
-  name: corpus-qa
-  src_dir: agent-src/corpus-qa
-  includes: [frag-setup-gate, frag-failure-policy]
-  rules: [rule-md-assembly, rule-include-resolution, rule-skill-dir-subst, rule-agent-layout]
-
-- id: agent-doc-indexer
-  status: approved
+- id: ag-indexer
   name: doc-indexer
-  src_dir: agent-src/doc-indexer
-  includes: [frag-setup-gate, frag-failure-policy]
-  rules: [rule-md-assembly, rule-include-resolution, rule-skill-dir-subst, rule-agent-layout]
-
-- id: agent-spec-extractor
+  phase: 現状把握
+  description: >-
+    プロジェクト資料のフォルダを一括抽出し、衝突しない ID で索引化する。
+    各資料に文書種別（要件定義・基本設計・議事録 等）を付与し、内容重複も
+    把握する。要約はしない。
+  output_policy: 機械可読な索引のみ。要約等の人間向け終端フォーマットは持たない
   status: approved
+  rules: [dr-02, dr-03]
+  source:
+    doc: docagent/README.md
+    location: { section: "3 つのカスタムエージェント" }
+    evidence: "フォルダを一括抽出し、衝突しない ID で索引化。各資料に文書種別を付与、内容重複も把握（要約はしない）"
+
+- id: ag-spec
   name: spec-extractor
-  src_dir: agent-src/spec-extractor
-  includes: [frag-setup-gate, frag-spec-criteria, frag-failure-policy]
-  rules: [rule-md-assembly, rule-include-resolution, rule-skill-dir-subst, rule-agent-layout]
+  phase: 仕様の洗い出し
+  description: >-
+    抽出済み文書から機能要件・業務ルール・データ項目・画面/帳票・
+    外部インターフェース・非機能要件等を項目化し、出典付きの構造化ファクト
+    として保存する。バッチでは文書ごとに割り当てて並列化できる。
+  output_policy: 各ファクトは doc_id + location + evidence（原文）を必ず持つ
+  status: approved
+  rules: [dr-01, dr-02, dr-03]
+  source:
+    doc: docagent/README.md
+    location: { section: "仕様ファクト JSON の構造" }
+    evidence: "各項目は必ず doc_id（どの文書）+ location（どこ）+ evidence（原文）を持ち、後工程が根拠を辿れる。"
+
+- id: ag-designer
+  name: spec-designer
+  phase: 仕様の正本化・設計書生成
+  description: >-
+    仕様ファクトや資料・利用者の指示を specdb の正本データ（メタモデル +
+    アイテム + 関係、出典付き YAML）として設計・整備し、機械検証を通したうえで
+    日本の伝統的な設計書・仕様書（Excel 風 HTML / Markdown）を生成する。
+    設計書は手書きしない。
+  output_policy: 正本はデータ、設計書は生成ビュー。検証 error 0 を必達とし、出典 (source) を引き継ぐ
+  status: review
+  rules: [dr-01, dr-03, dr-06]
+  source:
+    doc: agent-src/spec-designer/frontmatter.common.yaml
+    location: { section: "description" }
+    evidence: "仕様を specdb の正本データ（メタモデル + アイテム + 関係、出典付き YAML）として設計・整備し、機械検証（error 0）を通したうえで、日本の伝統的な SIer 文化になじむ設計書・仕様書…を生成する"
+
+- id: ag-qa
+  name: corpus-qa
+  phase: 横断 QA
+  description: >-
+    抽出済みの資料を横断検索し、設計や現状把握の問いに必ず出典
+    （どの文書のどこ）を添えて答える。資料にないことは「該当なし」と返し、
+    推測しない。
+  output_policy: 回答は必ず出典付き。資料に根拠がなければ「該当なし」
+  status: approved
+  rules: [dr-01]
+  source:
+    doc: docagent/README.md
+    location: { section: "3 つのカスタムエージェント" }
+    evidence: "抽出済み資料を横断検索し、必ず出典付きで問いに答える（無ければ「該当なし」）"

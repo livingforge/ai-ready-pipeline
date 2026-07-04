@@ -1,0 +1,301 @@
+{#-
+  システム基本設計書（Excel 風 HTML）— DocExtract 資料活用基盤の設計を
+  伝統的な日本の設計書の情報設計で描画する。
+
+  章立て:  1 概要（前書き + 全体構成図 + 構成要素一覧）
+           2 機能一覧
+           3 文書抽出スキル（docextract）   4 資料活用エージェント
+           5 仕様データ管理スキル（specdb）  6 データ設計
+           7 設計方針  8 外部ライブラリ  付録 出典一覧
+  本文は日本語名称を主体にし、ID・出典・原文は付録に集約する。
+-#}
+{% import "_excel.html.j2" as ex %}
+{% set skills = store.items_of('skill') %}
+{% set agents = store.items_of('agent') %}
+{% set modules = store.items_of('module') %}
+{% set functions = store.items_of('function') %}
+{% set artifacts = store.items_of('artifact') %}
+{% set formats = store.items_of('file-format') %}
+{% set rules = store.items_of('design-rule') %}
+{% set libs = store.items_of('library') %}
+{% set dex = store.items['sk-docextract'] %}
+{% set sdb = store.items['sk-specdb'] %}
+{{ ex.page_start(doc.title) }}
+{{ ex.cover(doc.title, doc.doc_no, doc.version, generated_at[:10], 'specdb（自動生成）',
+            '本書は仕様データから自動生成されたビューです。直接編集しないでください。') }}
+
+{% call ex.sheet('改訂履歴', doc.title, doc.doc_no, doc.version) %}
+{{ ex.rev_history([{'version': doc.version, 'date': generated_at[:10],
+                    'note': '初版（データ版 ' ~ data_rev ~ ' から自動生成）', 'author': 'specdb'}]) }}
+{% endcall %}
+
+{# ---- 目次 --------------------------------------------------------------- #}
+{% call ex.sheet('目次', doc.title, doc.doc_no, doc.version) %}
+{{ ex.toc([
+  {'no': '1',   'sheet': '1. 概要',             'desc': '目的・対象範囲・前提、全体構成図、構成要素一覧'},
+  {'no': '2',   'sheet': '2. 機能一覧',          'desc': '基盤が提供する機能と実現する構成要素'},
+  {'no': '3',   'sheet': '3. 文書抽出スキル',     'desc': 'docextract — 対応形式・抽出機能・出力'},
+  {'no': '4',   'sheet': '4. 資料活用エージェント', 'desc': 'doc-indexer / spec-extractor / corpus-qa の仕様'},
+  {'no': '5',   'sheet': '5. 仕様データ管理スキル', 'desc': 'specdb — 検証・設計書生成・差分・可視化'},
+  {'no': '6',   'sheet': '6. データ設計',         'desc': '工程間で受け渡すデータ成果物の定義'},
+  {'no': '7',   'sheet': '7. 設計方針',           'desc': '全体を貫く設計原則と適用先'},
+  {'no': '8',   'sheet': '8. 外部ライブラリ',      'desc': '依存ライブラリ・用途・ライセンス'},
+  {'no': '付録', 'sheet': '付録 出典一覧',        'desc': '各記載の出典（元資料・箇所・原文）'},
+]) }}
+{% endcall %}
+
+{# ---- 1. 概要 ------------------------------------------------------------ #}
+{% call ex.sheet('1. 概要', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('1.1', '目的') }}
+{{ ex.prose(doc.preface.purpose) }}
+{{ ex.sec('1.2', '対象範囲') }}
+{{ ex.prose(doc.preface.scope) }}
+{{ ex.sec('1.3', '前提') }}
+{{ ex.prose(doc.preface.premise) }}
+{{ ex.sec('1.4', '全体構成') }}
+{{ ex.prose('本基盤は「資料の山 → 検証可能な仕様データ → 生成される設計書」のパイプラインを構成する。' ~
+            '構成要素とデータ成果物の授受（生成・入力）を図 1-1 に示す。') }}
+{# 構成要素 = produces / consumes のいずれかを持つスキル・エージェント・モジュール #}
+{% set comps = [] %}
+{% for t in ['skill', 'agent', 'module'] %}
+  {% for c in store.items_of(t) %}
+    {% if store.relations_of('produces', src=c.id) or store.relations_of('consumes', src=c.id) %}
+      {% set _ = comps.append(c) %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+{% set cidx = {} %}
+{% for c in comps %}{% set _ = cidx.update({c.id: loop.index0}) %}{% endfor %}
+{% set aidx = {} %}
+{% for a in artifacts %}{% set _ = aidx.update({a.id: loop.index0}) %}{% endfor %}
+{% set edges = [] %}
+{% for rel in store.relations %}
+  {% if rel.type in ['produces', 'consumes'] and rel.src in cidx and rel.dst in aidx %}
+    {% set _ = edges.append([cidx[rel.src], aidx[rel.dst]]) %}
+  {% endif %}
+{% endfor %}
+{% set left = [] %}
+{% for c in comps %}{% set _ = left.append({'label': c.attrs.name, 'sub': store.mm.item_types[c.type].label}) %}{% endfor %}
+{% set right = [] %}
+{% for a in artifacts %}{% set _ = right.append({'label': a.attrs.name, 'sub': a.attrs.format}) %}{% endfor %}
+{% call ex.fig('図 1-1　構成要素とデータ成果物の関係（生成・入力の関係から自動生成）') %}
+{{ ex.bipartite(left, right, edges, '構成要素', 'データ成果物') }}
+{% endcall %}
+{{ ex.sec('1.5', '構成要素一覧') }}
+<table class="xl">
+  <tr>
+    <th style="width:5%">項番</th><th style="width:12%">区分</th>
+    <th style="width:20%">名称</th><th>概要</th><th style="width:9%">状態</th>
+  </tr>
+  {% set rowno = [0] %}
+  {% for t in ['skill', 'agent', 'module'] %}
+  {% for c in store.items_of(t) %}
+  {% set _ = rowno.append(rowno.pop() + 1) %}
+  <tr>
+    <td class="c">{{ rowno[0] }}</td>
+    <td class="c">{{ store.mm.item_types[t].label }}</td>
+    <td>{{ c.attrs.name }}</td>
+    <td>{{ c.attrs.purpose if c.attrs.purpose else (c.attrs.description if c.attrs.description else '') }}</td>
+    {{ ex.status_td(c) }}
+  </tr>
+  {% endfor %}
+  {% endfor %}
+</table>
+{% endcall %}
+
+{# ---- 2. 機能一覧 --------------------------------------------------------- #}
+{% call ex.sheet('2. 機能一覧', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('2', '機能一覧') }}
+{{ ex.prose('本基盤が提供する機能の一覧。各機能を実現する構成要素は仕様データの「実現する」関係から転記される。') }}
+<table class="xl">
+  <tr>
+    <th style="width:7%">機能ID</th><th style="width:16%">機能名</th>
+    <th style="width:9%">分類</th><th>機能概要</th>
+    <th style="width:20%">実現する構成要素</th><th style="width:8%">状態</th>
+  </tr>
+  {% for f in functions %}
+  <tr>
+    <td class="c">{{ f.attrs.func_id }}</td>
+    <td>{{ f.attrs.name }}</td>
+    <td class="c">{{ f.attrs.category }}</td>
+    <td>{{ f.attrs.description }}</td>
+    <td>{{ store.relating_to('realizes', [f.id])|map(attribute='id')|map('item_label')|join('、') }}</td>
+    {{ ex.status_td(f) }}
+  </tr>
+  {% endfor %}
+</table>
+{% endcall %}
+
+{# ---- 3. 文書抽出スキル（docextract） ------------------------------------- #}
+{% call ex.sheet('3. 文書抽出スキル', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('3', '文書抽出スキル　' ~ dex.attrs.name) }}
+{{ ex.kv([('名称', dex.attrs.name), ('目的', dex.attrs.purpose),
+          ('実行環境', dex.attrs.runtime), ('状態', dex.status|status)]) }}
+{{ ex.subsec('3.1', '対応文書形式') }}
+<table class="xl">
+  <tr>
+    <th style="width:5%">項番</th><th style="width:12%">形式</th>
+    <th style="width:12%">拡張子</th><th>抽出内容</th><th style="width:26%">出典位置情報</th>
+  </tr>
+  {% for rel in store.relations_of('supports', src=dex.id) %}
+  {% set fm = store.items[rel.dst] %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td class="c">{{ fm.attrs.name }}</td>
+    <td class="c">{{ fm.attrs.extensions }}</td>
+    <td>{{ fm.attrs.contents }}</td>
+    <td>{{ fm.attrs.location_keys }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="hint">出典位置情報は、後工程（仕様ファクト・仕様データ）の出典 (location) の粒度となる。</p>
+{{ ex.subsec('3.2', '機能') }}
+{% set dexfn = [] %}
+{% for rel in store.relations_of('realizes', src=dex.id) %}{% set _ = dexfn.append(rel.dst) %}{% endfor %}
+{% for rel in store.relations_of('realizes', src='mod-docextract') %}
+  {% if rel.dst not in dexfn %}{% set _ = dexfn.append(rel.dst) %}{% endif %}
+{% endfor %}
+<table class="xl">
+  <tr><th style="width:7%">機能ID</th><th style="width:22%">機能名</th><th>機能概要</th><th style="width:8%">状態</th></tr>
+  {% for fid in dexfn %}
+  {% set f = store.items[fid] %}
+  <tr>
+    <td class="c">{{ f.attrs.func_id }}</td><td>{{ f.attrs.name }}</td>
+    <td>{{ f.attrs.description }}</td>
+    {{ ex.status_td(f) }}
+  </tr>
+  {% endfor %}
+</table>
+{{ ex.subsec('3.3', '出力') }}
+<table class="xl">
+  <tr><th style="width:5%">項番</th><th style="width:18%">成果物</th><th style="width:32%">格納場所</th><th>説明</th></tr>
+  {% for rel in store.relations_of('produces', src=dex.id) %}
+  {% set a = store.items[rel.dst] %}
+  <tr>
+    <td class="c">{{ loop.index }}</td><td>{{ a.attrs.name }}</td>
+    <td>{{ a.attrs.path }}</td><td>{{ a.attrs.description }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endcall %}
+
+{# ---- 4. 資料活用エージェント --------------------------------------------- #}
+{% call ex.sheet('4. 資料活用エージェント', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('4', '資料活用エージェント') }}
+{{ ex.prose('抽出済み資料を後工程（現状把握・仕様の洗い出し・横断調査・仕様の正本化）で使うためのエージェント群。' ~
+            '成果物は出典を辿れる機械可読データ（または正本データからの生成ビュー）に限る。') }}
+{% for a in agents %}
+{% set ch = '4.' ~ loop.index %}
+{{ ex.subsec(ch, a.attrs.name ~ '（' ~ a.attrs.phase ~ '）') }}
+{{ ex.kv([('名称', a.attrs.name), ('担当工程', a.attrs.phase), ('概要', a.attrs.description),
+          ('成果物の規律', a.attrs.output_policy),
+          ('利用する手段', store.relations_of('uses', src=a.id)|map(attribute='dst')|map('item_label')|join('、')),
+          ('入力', store.relations_of('consumes', src=a.id)|map(attribute='dst')|map('item_label')|join('、')),
+          ('生成', store.relations_of('produces', src=a.id)|map(attribute='dst')|map('item_label')|join('、') or '—（回答のみ）'),
+          ('状態', a.status|status)]) }}
+{% endfor %}
+{% endcall %}
+
+{# ---- 5. 仕様データ管理スキル（specdb） ----------------------------------- #}
+{% call ex.sheet('5. 仕様データ管理スキル', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('5', '仕様データ管理スキル　' ~ sdb.attrs.name) }}
+{{ ex.kv([('名称', sdb.attrs.name), ('目的', sdb.attrs.purpose),
+          ('実行環境', sdb.attrs.runtime), ('状態', sdb.status|status)]) }}
+{{ ex.subsec('5.1', '機能') }}
+<table class="xl">
+  <tr><th style="width:7%">機能ID</th><th style="width:22%">機能名</th><th>機能概要</th><th style="width:8%">状態</th></tr>
+  {% for rel in store.relations_of('realizes', src=sdb.id) %}
+  {% set f = store.items[rel.dst] %}
+  <tr>
+    <td class="c">{{ f.attrs.func_id }}</td><td>{{ f.attrs.name }}</td>
+    <td>{{ f.attrs.description }}</td>
+    {{ ex.status_td(f) }}
+  </tr>
+  {% endfor %}
+</table>
+{{ ex.subsec('5.2', '正本と生成ビュー') }}
+{{ ex.prose(['仕様データ（' ~ store.items['ar-specdata'].attrs.path ~ '）が正本であり、設計書（本書を含む）はそこから生成されるビューである。' ~
+             '検証で error が 1 件でもあれば生成は中止され、CI で変更をブロックできる。',
+             '仕様ファクト (facts.json) から仕様データへの変換は現状 Claude が補助する（自動取り込みアダプタは未実装）。']) }}
+{% endcall %}
+
+{# ---- 6. データ設計 -------------------------------------------------------- #}
+{% call ex.sheet('6. データ設計', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('6', 'データ設計') }}
+{{ ex.prose('工程間で受け渡すデータ成果物の定義。生成元・入力元は仕様データの「生成する」「入力とする」関係から転記される。') }}
+<table class="xl">
+  <tr>
+    <th style="width:4%">項番</th><th style="width:12%">成果物</th>
+    <th style="width:22%">格納場所</th><th style="width:10%">形式</th>
+    <th>説明</th><th style="width:11%">生成元</th><th style="width:13%">入力元</th>
+  </tr>
+  {% for a in artifacts %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ a.attrs.name }}</td>
+    <td>{{ a.attrs.path }}</td>
+    <td class="c">{{ a.attrs.format }}</td>
+    <td>{{ a.attrs.description }}</td>
+    <td>{{ store.relating_to('produces', [a.id])|map(attribute='id')|map('item_label')|join('、') or '—' }}</td>
+    <td>{{ store.relating_to('consumes', [a.id])|map(attribute='id')|map('item_label')|join('、') or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="hint">「生成元 —」の成果物は人手（Claude 補助）で作成される正本。「入力元 —」は利用者向けの最終出力。</p>
+{% endcall %}
+
+{# ---- 7. 設計方針 ---------------------------------------------------------- #}
+{% call ex.sheet('7. 設計方針', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('7', '設計方針') }}
+{{ ex.prose('全体を貫く設計原則。適用先は仕様データの「方針に従う」関係から転記される。') }}
+{% for r in rules %}
+{{ ex.rule_article('7.' ~ loop.index, r.attrs.rule_id ~ '　' ~ r.attrs.name, r.attrs.statement,
+                   store.relating_to('follows', [r.id])|map(attribute='id')|map('item_label')|join('、'), r) }}
+{% endfor %}
+{% endcall %}
+
+{# ---- 8. 外部ライブラリ ----------------------------------------------------- #}
+{% call ex.sheet('8. 外部ライブラリ', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('8', '外部ライブラリ') }}
+{{ ex.prose('依存ライブラリの一覧。すべて MIT / BSD / Apache-2.0 系で商用利用可能な構成とする（DR-05）。') }}
+<table class="xl">
+  <tr>
+    <th style="width:5%">項番</th><th style="width:22%">ライブラリ</th>
+    <th>用途</th><th style="width:14%">ライセンス</th><th style="width:22%">依存元</th>
+  </tr>
+  {% for l in libs %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ l.attrs.name }}</td>
+    <td>{{ l.attrs.usage }}</td>
+    <td class="c">{{ l.attrs.license }}</td>
+    <td>{{ store.relating_to('depends-on', [l.id])|map(attribute='id')|map('item_label')|join('、') }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endcall %}
+
+{# ---- 付録: 出典一覧 -------------------------------------------------------- #}
+{% set srcrows = [] %}
+{% for t in ['skill', 'agent', 'module', 'function', 'artifact', 'file-format', 'design-rule', 'library'] %}
+  {% for it in store.items_of(t) %}
+    {% if it.source %}
+      {% set _ = srcrows.append({'name': it.label(store.mm)|truncate(40),
+                                 'kind': store.mm.item_types[t].label,
+                                 'id': it.id, 'src': it.source}) %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+{% for rel in store.relations %}
+  {% if rel.source %}
+    {% set _ = srcrows.append({'name': rel.src|item_label ~ ' → ' ~ rel.dst|item_label,
+                               'kind': store.mm.relation_types[rel.type].label,
+                               'id': rel.type, 'src': rel.source}) %}
+  {% endif %}
+{% endfor %}
+{% call ex.sheet('付録 出典一覧', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('付録', '出典一覧（トレーサビリティ）') }}
+{{ ex.prose('本文の各記載がどの資料のどこに由来するかの一覧。本文では名称のみを示し、ID・出典・原文はここに集約する。') }}
+{{ ex.appendix_sources(srcrows) }}
+{% endcall %}
+{{ ex.page_end() }}

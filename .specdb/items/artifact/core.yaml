@@ -1,0 +1,92 @@
+# データ成果物 — 工程間で受け渡される構造化データ（データ設計の正本）
+
+- id: ar-result
+  name: 抽出結果
+  path: .docextract/output/<id>/result.json（images/ を含む）
+  format: JSON + 画像ファイル
+  description: >-
+    1 文書の抽出結果。文書 ID・内容ハッシュ・メタデータ・要素一覧
+    （text / table / image、各要素に形式ごとの location）を持つ。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "出力 JSON の形式" }
+    evidence: "\"elements\": [ { \"type\": \"text\", … \"location\": { \"order\": 1 } } …]"
+
+- id: ar-manifest
+  name: 抽出マニフェスト
+  path: .docextract/output/index.json
+  format: JSON
+  description: 抽出済み文書の索引。ID で引け、内容重複の検知に使う。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "使い方 > CLI" }
+    evidence: "index.json # 抽出マニフェスト (id で索引・内容重複の検知)"
+
+- id: ar-library
+  name: 文書索引
+  path: .docextract/store/library.json
+  format: JSON
+  description: >-
+    集約ストアの文書索引。文書ごとに ID・出典パス・内容ハッシュ・抽出結果への
+    参照・本文抜粋 (preview)・文書種別 (doctype) を持つ。要約・分類ラベル・
+    状態フラグは持たない。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "集約 JSON の構造" }
+    evidence: "要約・分類ラベル・状態フラグは持たない（要約は人間向け終端フォーマットのため排除…）"
+
+- id: ar-facts
+  name: 仕様ファクト
+  path: .docextract/store/facts.json
+  format: JSON
+  description: >-
+    出典付きの仕様/要件項目。各項目は doc_id + location + evidence（原文）を
+    必ず持ち、statement は後工程がそのまま使える 1 文で書く。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "仕様ファクト JSON の構造" }
+    evidence: "\"statement\": \"ユーザは月次売上をCSVで出力できる\", \"evidence\": \"月次売上はCSVエクスポート可能\""
+
+- id: ar-specdata
+  name: 仕様データ（正本）
+  path: .specdb/（metamodel.yaml + items/ + relations/）
+  format: YAML
+  description: >-
+    仕様アイテムと関係の正本。メタモデルの宣言に従い機械検証され、
+    設計書はここから生成される。仕様ファクトからの変換は spec-designer
+    エージェントが担う（自動取り込みアダプタは未実装）。
+  status: approved
+  source:
+    doc: specdb/README.md
+    location: { section: "構成" }
+    evidence: "items/<種別>/*.yaml # アイテムの正本。種別はディレクトリ名で決まる。"
+
+- id: ar-gendoc
+  name: 生成設計書
+  path: .specdb/out/
+  format: Markdown / 自己完結 HTML
+  description: >-
+    仕様データから生成される設計書ビュー（本書を含む）。直接編集せず、
+    仕様変更は items/・relations/ を直して再生成する。
+  status: approved
+  source:
+    doc: specdb/README.md
+    location: { section: "構成" }
+    evidence: "out/ # 生成物（ビュー。直接編集しない）"
+
+- id: ar-dist
+  name: 配布物アーカイブ
+  path: dist/docextract-skill.zip
+  format: ZIP
+  description: >-
+    スキル・エージェント定義・パッケージメタをまとめた配布物。展開先
+    リポジトリのルートに解凍するだけで導入が完了する。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "スキルとしての配布" }
+    evidence: "dist/docextract-skill.zip 上記をまとめた配布物 (展開先リポジトリのルートに解凍するだけで導入完了)"

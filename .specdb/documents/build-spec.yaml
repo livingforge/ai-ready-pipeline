@@ -1,4 +1,0 @@
-# 文書定義: ビルド仕様書（規則の一覧と適用先）
-title: ビルド仕様書
-output: ビルド仕様書.md
-template: build-spec.md.j2

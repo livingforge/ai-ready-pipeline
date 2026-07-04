@@ -1,124 +1,133 @@
-# メタモデル — 配布物 (.claude / .github) の設計を仕様データとして表現する
+# メタモデル — DocExtract 資料活用基盤そのものの設計を仕様データとして表現する
 #
-# 正本は skill-src/ + agent-src/ + 本体パッケージと build_skill.py のビルド規則。
-# ここでは「何を・どの規則で・どこへ展開するか」という設計判断をデータ化する。
-# .github/ のファイル一覧そのものではなく、その"あるべき姿"の宣言。
+# 正本はこの .specdb/ の items/ + relations/。README.md 等の記述はその出典
+# (source) として参照する。設計書 (out/) はここから生成されるビューであり、
+# 直接編集しない。
 #
-# 出典 (source) は原則 scripts/build_skill.py の該当箇所を指す。
+# 語彙: 構成要素（スキル・エージェント・ソースモジュール）が「機能」を実現し、
+#       「データ成果物」を生成・入力し、「設計方針」に従い、
+#       「外部ライブラリ」に依存する。
 
 version: 1
 
 item_types:
-
-  platform:
-    label: 展開先プラットフォーム
-    label_field: name
-    attributes:
-      name:         { kind: string, required: true, unique: true }
-      root_dir:     { kind: string, required: true, unique: true }   # ".github" 等
-      agent_suffix: { kind: string, required: true }                 # ".agent.md" 等
-      agent_layout: { kind: enum, values: [flat, nested], required: true }
-      description:  { kind: string }
 
   skill:
     label: スキル
     label_field: name
     attributes:
       name:    { kind: string, required: true, unique: true }
-      src_dir: { kind: string, required: true, unique: true }
+      purpose: { kind: string, required: true }
+      runtime: { kind: string }
 
   agent:
     label: エージェント
     label_field: name
     attributes:
-      name:    { kind: string, required: true, unique: true }
-      src_dir: { kind: string, required: true, unique: true }
+      name:          { kind: string, required: true, unique: true }
+      phase:         { kind: string, required: true }   # 担当する工程
+      description:   { kind: string, required: true }
+      output_policy: { kind: string }                   # 成果物の規律（出典必須 等）
 
-  shared-fragment:
-    label: 共有フラグメント
-    label_field: name
-    warn_if_unreferenced: true   # どのエージェントからも include されなければ孤児警告
-    attributes:
-      name: { kind: string, required: true, unique: true }
-      path: { kind: string, required: true, unique: true }
-      description: { kind: string }
-
-  source-module:
+  module:
     label: ソースモジュール
     label_field: name
-    warn_if_unreferenced: true   # どのスキルからも同梱も除外もされないモジュールは警告
+    attributes:
+      name:        { kind: string, required: true, unique: true }
+      path:        { kind: string, required: true, unique: true }
+      description: { kind: string, required: true }
+
+  function:
+    label: 機能
+    label_field: name
+    warn_if_unreferenced: true    # どの構成要素にも実現されない機能は孤児
+    attributes:
+      func_id:     { kind: string, required: true, unique: true }
+      name:        { kind: string, required: true, unique: true }
+      description: { kind: string, required: true }
+      category:    { kind: enum, values: [文書抽出, 資料活用, 仕様管理, 配布], required: true }
+
+  artifact:
+    label: データ成果物
+    label_field: name
+    warn_if_unreferenced: true    # 誰も生成も入力もしない成果物は孤児
     attributes:
       name:        { kind: string, required: true, unique: true }
       path:        { kind: string, required: true }
-      description: { kind: string }
+      format:      { kind: string, required: true }
+      description: { kind: string, required: true }
 
-  build-rule:
-    label: ビルド規則
-    label_field: statement
-    warn_if_unreferenced: true   # どの配布単位も従わない規則は孤児警告
+  file-format:
+    label: 対応文書形式
+    label_field: name
+    warn_if_unreferenced: true
     attributes:
+      name:          { kind: string, required: true, unique: true }
+      extensions:    { kind: string, required: true }
+      contents:      { kind: string, required: true }   # 抽出内容
+      location_keys: { kind: string, required: true }   # 出典位置情報の粒度
+
+  design-rule:
+    label: 設計方針
+    label_field: name
+    warn_if_unreferenced: true    # どの構成要素も従わない方針は孤児
+    attributes:
+      rule_id:   { kind: string, required: true, unique: true }
+      name:      { kind: string, required: true, unique: true }
       statement: { kind: string, required: true }
 
-  pack-meta:
-    label: パッケージメタ
+  library:
+    label: 外部ライブラリ
     label_field: name
+    warn_if_unreferenced: true    # どのモジュールも依存しないライブラリは孤児
     attributes:
       name:    { kind: string, required: true, unique: true }
-      src_dir: { kind: string, required: true }
-      files:   { kind: string }
-
-  distribution:
-    label: 配布物アーカイブ
-    label_field: name
-    attributes:
-      name: { kind: string, required: true, unique: true }
-      path: { kind: string, required: true, unique: true }
+      usage:   { kind: string, required: true }
+      license: { kind: string, required: true }
 
 relation_types:
 
-  deploys-to:
-    label: 展開する
-    from: [skill, agent, pack-meta]
-    to: platform
-    cardinality: { from: "1..*", to: "1..*" }  # どこにも展開されない配布単位 / 空のプラットフォームは error
-    attributes:
-      # プロジェクトルートからの展開先パス。同じ配布単位の中で重複禁止
-      out_path: { kind: string, required: true, unique: true }
-      note:     { kind: string }
+  realizes:
+    label: 実現する
+    from: [skill, agent, module]
+    to: function
+    cardinality: { to: "1..*" }   # 実現主体のいない機能は error
 
-  bundles:
-    label: 同梱する
+  produces:
+    label: 生成する
+    from: [skill, agent, module]
+    to: artifact
+    attributes:
+      note: { kind: string }
+
+  consumes:
+    label: 入力とする
+    from: [skill, agent, module]
+    to: artifact
+    attributes:
+      note: { kind: string }
+
+  supports:
+    label: 対応する
     from: skill
-    to: source-module
-    embedded: { field: bundles, target_key: module }
-    attributes:
-      dest:    { kind: string, required: true, unique: true }  # スキルディレクトリ内の配置先
-      exclude: { kind: string }   # copytree の ignore パターン等の除外規則
-      note:    { kind: string }
+    to: file-format
+    cardinality: { to: "1..*" }   # どのスキルも対応しない形式は error
 
-  excludes:
-    label: 同梱しない
-    from: skill
-    to: source-module
-    embedded: { field: excludes, target_key: module }
-    attributes:
-      reason: { kind: string, required: true }   # 除外は必ず理由つきで宣言する
-
-  includes:
-    label: 差し込む
+  uses:
+    label: 利用する
     from: agent
-    to: shared-fragment
-    ordered: true                # body.md 内の出現順
-    embedded: { field: includes }
+    to: [skill, module]
 
-  governed-by:
-    label: 規則に従う
-    from: [skill, agent, distribution]
-    to: build-rule
-    embedded: { field: rules }
+  follows:
+    label: 方針に従う
+    from: [skill, agent, module]
+    to: design-rule
+    embedded: { field: rules }    # アイテム側に rules: [dr-…] と書ける
 
-  packages:
-    label: 収録する
-    from: distribution
-    to: platform
-    embedded: { field: packages }
+  depends-on:
+    label: 依存する
+    from: module
+    to: library
+    embedded: { field: depends, target_key: lib }
+    attributes:
+      note: { kind: string }

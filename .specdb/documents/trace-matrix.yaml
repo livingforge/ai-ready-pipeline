@@ -1,4 +1,0 @@
-# 文書定義: 同梱トレーサビリティ表（ソース → 配布先の対応）
-title: 同梱トレーサビリティ表
-output: 同梱トレーサビリティ表.md
-template: trace-matrix.md.j2

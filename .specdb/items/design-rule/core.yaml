@@ -1,0 +1,76 @@
+# 設計方針 — 全体を貫く原則（各構成要素が follows 関係で従う）
+
+- id: dr-01
+  rule_id: DR-01
+  name: 出典トレーサビリティ
+  statement: >-
+    すべての成果物は「どの文書のどこ」を辿れる出典を持つ。抽出要素の location、
+    仕様ファクトの doc_id + location + evidence、仕様データの source まで、
+    全工程で出典が途切れないこと。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "冒頭" }
+    evidence: "成果物はすべて出典（どの文書のどこ）を辿れる構造化 JSON で、以降の工程に渡せる。"
+
+- id: dr-02
+  rule_id: DR-02
+  name: 機械可読な中間成果物
+  statement: >-
+    要約のような人間向け終端フォーマットを成果物にしない。後工程がそのまま
+    利用できる構造化 JSON / YAML を出力すること。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "3 つのカスタムエージェント" }
+    evidence: "成果物は機械可読・出典付きで、要約のような人間向け終端フォーマットではなく、後工程が食える中間成果物を出す。"
+
+- id: dr-03
+  rule_id: DR-03
+  name: 宣言駆動・コード改修レス
+  statement: >-
+    文書種別・ファクト種別・仕様メタモデル・文書テンプレートはデータ/宣言で
+    拡張する。新しい種別・関係・文書の追加にエンジンのコード改修を要しないこと。
+  status: approved
+  source:
+    doc: specdb/README.md
+    location: { section: "冒頭" }
+    evidence: "何が存在してよいか（種別・属性・関係）はすべて metamodel.yaml の宣言で決まり、新しい種別・関係の追加にエンジンのコード改修は不要。"
+
+- id: dr-04
+  rule_id: DR-04
+  name: 単一ソース・多プラットフォーム配布
+  statement: >-
+    .claude/ と .github/ 配下は生成物であり直接編集しない。修正は skill-src/・
+    agent-src/・本体パッケージに対して行い、ビルドで両プラットフォームへ
+    同一内容を展開すること。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "テスト" }
+    evidence: ".claude/ .github/ 配下は生成物なので直接編集しないこと。変更は skill-src/ (スキル文書)・agent-src/ (エージェント定義)・docextract/ (コード) に対して行い、再ビルドする。"
+
+- id: dr-05
+  rule_id: DR-05
+  name: 自己完結・商用利用可能
+  statement: >-
+    生成 HTML は依存・CDN なしの自己完結とする。テストはネットワーク・
+    バイナリコミット・OCR モデル不要で配布先でも自己検証できる。依存
+    ライブラリはすべて MIT / BSD / Apache-2.0 系とする。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "依存ライブラリとライセンス" }
+    evidence: "すべて MIT / BSD / Apache-2.0 系で、商用利用可能な構成です。"
+
+- id: dr-06
+  rule_id: DR-06
+  name: 正本と生成ビューの分離
+  statement: >-
+    仕様データ（items/ + relations/）が正本であり、設計書は生成されるビューに
+    すぎない。生成物 (out/) は直接編集せず、仕様変更はデータを直して再生成する。
+  status: approved
+  source:
+    doc: specdb/README.md
+    location: { section: "構成" }
+    evidence: "out/ # 生成物（ビュー。直接編集しない）"

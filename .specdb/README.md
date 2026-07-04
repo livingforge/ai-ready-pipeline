@@ -1,48 +1,34 @@
-# .specdb — 配布物 (.claude / .github) の設計を仕様データとして管理する
+# .specdb — DocExtract 資料活用基盤の仕様データ（正本）
 
-このディレクトリは、DocExtract の配布物ビルド（`scripts/build_skill.py`）の
-**設計判断**を specdb のデータ（正本）として表現したもの。
+このディレクトリは、本リポジトリ（docextract / specdb）**自体の設計**を
+仕様データとして管理するデータルート。README 等の記述は各アイテムの
+出典 (source) として参照され、設計書はここから生成されるビューになる。
 
-- `.claude/` / `.github/` は生成物（ビュー）であり、ここに書くのはファイル一覧
-  そのものではなく「何を・どの規則で・どこへ展開するか」という宣言
-- 各アイテム・関係の `source` は `scripts/build_skill.py` の該当箇所を指す
-- このディレクトリ自体も配布物に含まれる: Git 公開対象（.gitignore の許可リスト）
-  かつ配布 zip に収録される（rule-zip）。ただし `out/`（生成ビュー）は
-  どちらからも除外され、必要なら受け取り側で再生成する
+## 語彙（metamodel.yaml）
+
+- **構成要素**: スキル (skill)・エージェント (agent)・ソースモジュール (module)
+- **機能** (function): 機能一覧表の正本。実現主体のいない機能は検証 error
+- **データ成果物** (artifact): 工程間で受け渡す構造化データ（データ設計の正本）
+- **対応文書形式** (file-format) / **設計方針** (design-rule) / **外部ライブラリ** (library)
+- 関係: 実現する (realizes)・生成する (produces)・入力とする (consumes)・
+  対応する (supports)・利用する (uses)・方針に従う (follows, 埋め込み `rules:`)・
+  依存する (depends-on, 埋め込み `depends:`)
 
 ## 使い方
 
 ```bash
-python specdb/engine.py           # 検証（error で exit 1）
-python specdb/generate.py         # out/ に設計書 3 種を生成
-python specdb/diff.py      <基準> # ベースライン差分
+python .claude/skills/specdb/scripts/engine.py      # 検証（error で exit 1）
+python .claude/skills/specdb/scripts/generate.py    # 設計書を out/ に生成
+python .claude/skills/specdb/scripts/visualize.py   # 対話型グラフ out/specdb.html
+python .claude/skills/specdb/scripts/diff.py <tag>  # ベースライン差分
 ```
 
-`--root` を省略すると、カレントディレクトリの `.specdb/`（このディレクトリ）が
-自動的にデータルートになる（リポジトリ直下で実行する前提）。別の場所から実行する
-場合や別データを使う場合は `--root <dir>` を明示する。
+生成される設計書:
 
-生成される文書:
+- `out/基本設計書_DocExtract資料活用基盤.html` — 伝統的な Excel 設計書風の
+  自己完結 HTML（表紙・改訂履歴・目次・概要/全体構成図・機能一覧・
+  構成要素仕様・データ設計・設計方針・外部ライブラリ・出典一覧付録）
+- `out/specdb.html` — 仕様データ全体の対話型関係グラフ
 
-- **配布物構成書** — プラットフォーム別の展開一覧（.github 配下のあるべき姿）
-- **ビルド仕様書** — 変換規則・共有フラグメント・意図的な除外の一覧
-- **同梱トレーサビリティ表** — ソースモジュール → スキル内配置先の対応
-
-## 機械検証に乗っている設計制約
-
-- 配布単位（スキル/エージェント/パッケージメタ）は必ず 1 つ以上のプラットフォーム
-  へ展開される（`deploys-to` cardinality 1..*）
-- 同じ配布単位が同じ展開先パスを 2 度主張できない（`out_path` unique）
-- ソースモジュールは「同梱」か「理由つきの除外」のどちらかで必ず言及される
-  （孤児警告）。除外には `reason` が必須
-- `_shared/` のフラグメントはどこかのエージェントから include されている（孤児警告）
-- ビルド規則はどこかの配布単位が従っている（孤児警告）
-
-## 限界（重要）
-
-specdb は宣言と実物の一致までは検証しない。「このデータどおりに `.github/` が
-生成されているか」は `build_skill.py` 側の責務のまま。build_skill.py の定数群
-（`AGENT_SUFFIXES` / `AGENT_NESTED` 等）をこのデータから読むようにすれば、
-仕様データが文字どおり配布物の正本になる（未実装）。
-
-ビルド設計を変えるときは、`build_skill.py` と本ディレクトリの両方を更新すること。
+`out/` は生成物なので直接編集しない。仕様変更は items/・relations/ を直して
+再生成する（README を変えたら該当アイテムの source も追随させること）。

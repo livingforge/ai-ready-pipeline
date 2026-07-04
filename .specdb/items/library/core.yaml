@@ -1,0 +1,71 @@
+# 外部ライブラリ — 依存とライセンスの一覧（すべて商用利用可能な構成）
+
+- id: lib-python-docx
+  name: python-docx
+  usage: Word (.docx) 解析
+  license: MIT
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "python-docx Word 解析 MIT" }
+
+- id: lib-openpyxl
+  name: openpyxl
+  usage: Excel (.xlsx/.xlsm) 解析
+  license: MIT
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "openpyxl Excel 解析 MIT" }
+
+- id: lib-python-pptx
+  name: python-pptx
+  usage: PowerPoint (.pptx) 解析
+  license: MIT
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "python-pptx PowerPoint 解析 MIT" }
+
+- id: lib-pdfplumber
+  name: pdfplumber (pdfminer.six)
+  usage: PDF のテキスト・表抽出
+  license: MIT
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "pdfplumber (pdfminer.six) PDF テキスト・表 MIT" }
+
+- id: lib-pypdf
+  name: pypdf
+  usage: PDF の画像抽出
+  license: BSD-3-Clause
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "pypdf PDF 画像抽出 BSD-3-Clause" }
+
+- id: lib-rapidocr
+  name: rapidocr / rapid-table / rapid-layout
+  usage: OCR・画像内の表検出（PaddleOCR モデルの ONNX 版）
+  license: Apache-2.0
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "rapidocr / rapid-table / rapid-layout OCR・表検出 Apache-2.0" }
+
+- id: lib-pillow
+  name: Pillow
+  usage: 画像処理
+  license: MIT-CMU
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "Pillow 画像処理 MIT-CMU" }
+
+- id: lib-winocr
+  name: winocr
+  usage: Windows 標準 OCR (Windows.Media.Ocr) のラッパー
+  license: MIT（エンジンは OS 機能）
+  status: approved
+  source: { doc: README.md, location: { section: "依存ライブラリとライセンス" }, evidence: "winocr Windows OCR ラッパー MIT (エンジンは OS 機能)" }
+
+- id: lib-pyyaml
+  name: PyYAML
+  usage: 仕様データ（YAML）の読み込み
+  license: MIT
+  status: approved
+  source: { doc: specdb/README.md, location: { section: "構成" }, evidence: "依存: PyYAML + Jinja2。" }
+
+- id: lib-jinja2
+  name: Jinja2
+  usage: 設計書テンプレートの描画
+  license: BSD-3-Clause
+  status: approved
+  source: { doc: specdb/README.md, location: { section: "構成" }, evidence: "依存: PyYAML + Jinja2。" }

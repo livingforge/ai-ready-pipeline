@@ -1,0 +1,6 @@
+# 対応する — docextract スキルの対応文書形式
+
+- { type: supports, from: sk-docextract, to: fmt-docx, status: approved }
+- { type: supports, from: sk-docextract, to: fmt-xlsx, status: approved }
+- { type: supports, from: sk-docextract, to: fmt-pptx, status: approved }
+- { type: supports, from: sk-docextract, to: fmt-pdf,  status: approved }

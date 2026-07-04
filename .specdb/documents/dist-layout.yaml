@@ -1,4 +1,0 @@
-# 文書定義: 配布物構成書（プラットフォーム別の展開一覧）
-title: 配布物構成書
-output: 配布物構成書.md
-template: dist-layout.md.j2

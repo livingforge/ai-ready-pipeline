@@ -1,0 +1,192 @@
+# 機能 — 利用者から見た機能の一覧（機能一覧表の正本）
+
+- id: fn-extract
+  func_id: F-01
+  name: 文書抽出
+  category: 文書抽出
+  description: >-
+    Word / Excel / PowerPoint / PDF からテキスト・表・画像を抽出し、
+    形式ごとの位置情報（出現順・シート・スライド・ページ/座標）付きの
+    JSON として出力する。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "対応形式" }
+    evidence: "Word .docx 段落 (スタイル名付き)・表・インライン画像 — 文書内の出現順"
+
+- id: fn-id
+  func_id: F-02
+  name: 衝突しない文書 ID の採番
+  category: 文書抽出
+  description: >-
+    入力ファイルの正規化済み絶対パスのハッシュを含む ID を採番する。
+    別フォルダの同名ファイルでも衝突せず、内容ハッシュで重複・改変も検知できる。
+    以降の全工程がこの ID をそのまま使う（再計算しない）。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "使い方 > CLI" }
+    evidence: "<id> は入力ファイルの正規化済み絶対パスのハッシュを含むため、別フォルダの同名ファイルでも衝突しません"
+
+- id: fn-ocr
+  func_id: F-03
+  name: 画像内テキストの OCR
+  category: 文書抽出
+  description: >-
+    スクリーンショット等として貼り付けられた画像内のテキストを OCR で読み取り、
+    画像要素の ocr_text に付加する。バックエンドは RapidOCR / Windows OCR を
+    自動選択できる。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "画像内テキストの OCR" }
+    evidence: "既定で各画像に OCR を実行し、読み取れたテキストを画像要素の ocr_text に付加します。"
+
+- id: fn-imgtable
+  func_id: F-04
+  name: 画像内の表の構造復元
+  category: 文書抽出
+  description: >-
+    画像として貼られた表をレイアウト解析 (rapid_layout) で検出し、表構造復元
+    (rapid_table) で行・列を復元して、通常の table 要素として出力する。
+    元画像への参照が location に残る。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "画像内の表検出 (OSS)" }
+    evidence: "画像として貼られた表を検出し、行・列構造を復元して通常の table 要素として出力します。"
+
+- id: fn-batch
+  func_id: F-05
+  name: フォルダ一括抽出・索引化
+  category: 資料活用
+  description: >-
+    フォルダ（再帰可）内の対応ファイルを一括抽出し、抽出マニフェストの全文書を
+    集約ストアの文書索引へ一括登録・更新する。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "現状把握（doc-indexer）" }
+    evidence: "python -m docagent sync # 抽出マニフェストの全文書を一括登録/更新"
+
+- id: fn-doctype
+  func_id: F-06
+  name: 文書種別の付与
+  category: 資料活用
+  description: >-
+    各資料に「要件定義・基本設計・議事録」等の文書種別を 1 つ付与する。
+    種別の定義はコードにハードコードせず、既定 JSON + ストア側の上書きの
+    2 段構えで管理する。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "文書種別（doctype）" }
+    evidence: "定義は 2 段構え（コードにハードコードしない）"
+
+- id: fn-search
+  func_id: F-07
+  name: 本文の横断検索
+  category: 資料活用
+  description: >-
+    登録済み文書の本文を横断検索し、出典 (doc_id + location) と抜粋を返す。
+    corpus-qa の回答の接地（グラウンディング）に使う。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "横断検索（corpus-qa）" }
+    evidence: "python -m docagent search \"権限\" --json # 本文を横断検索し doc_id + location + 抜粋を返す"
+
+- id: fn-facts
+  func_id: F-08
+  name: 仕様ファクトの管理
+  category: 資料活用
+  description: >-
+    文書から洗い出した機能要件・業務ルール・データ項目等を、出典付きファクト
+    (doc_id + location + evidence) として蓄積・一覧・出力する。
+  status: approved
+  source:
+    doc: docagent/README.md
+    location: { section: "仕様ファクト JSON の構造" }
+    evidence: "spec-extractor が保存する、出典付きの仕様/要件項目。"
+
+- id: fn-validate
+  func_id: F-09
+  name: 仕様データの機械検証
+  category: 仕様管理
+  description: >-
+    ID 一意性・必須属性・enum・多重度 (cardinality)・一意性 (unique)・
+    未定義参照・孤児を検証する。error が 1 件でもあれば設計書生成を中止し
+    exit 1 を返す（CI で PR をブロックできる）。
+  status: approved
+  source:
+    doc: specdb/README.md
+    location: { section: "エンジンが行う汎用検証" }
+    evidence: "error が 1 件でもあれば生成は中止され exit 1（CI で PR をブロックできる）。"
+
+- id: fn-generate
+  func_id: F-10
+  name: 設計書の自動生成
+  category: 仕様管理
+  description: >-
+    文書定義 (documents/) と Jinja2 テンプレートから、検証済み仕様データを
+    Markdown / Excel 風 HTML の設計書として生成する。文書種別の追加に
+    コード改修は不要。
+  status: approved
+  source:
+    doc: specdb/README.md
+    location: { section: "文書種別の追加方法（コード改修なし）" }
+    evidence: "documents/<名前>.yaml を書く（title / output / template の 3 行）"
+
+- id: fn-diff
+  func_id: F-11
+  name: ベースライン差分
+  category: 仕様管理
+  description: >-
+    Git タグをベースラインとして、2 リビジョン間の仕様データ差分
+    （変更点一覧）レポートを出力する。
+  status: approved
+  source:
+    doc: specdb/README.md
+    location: { section: "使い方" }
+    evidence: "git tag baseline/R1.0 で作成し、python specdb/diff.py baseline/R1.0 で「ベースラインからの変更点一覧」が出る。"
+
+- id: fn-visualize
+  func_id: F-12
+  name: 関係グラフの可視化
+  category: 仕様管理
+  description: >-
+    仕様データ全体を自己完結の対話型 HTML（依存・CDN なし）に描画する。
+    種別で色分けした関係グラフ・フィルタ・検索・ノード詳細・検証結果の
+    オーバーレイ・一覧テーブル表示を持つ。
+  status: review
+  source:
+    doc: .claude/skills/specdb/SKILL.md
+    location: { section: "冒頭" }
+    evidence: "visualize.py が仕様データ全体を自己完結の対話型 HTML（依存・CDN なし）に描画する"
+
+- id: fn-author
+  func_id: F-14
+  name: 仕様の正本化・設計書生成
+  category: 仕様管理
+  description: >-
+    仕様ファクトや資料・指示から metamodel.yaml と items/・relations/ を設計・
+    整備し（出典を引き継ぐ）、検証を通したうえで文書定義・テンプレートを設計して
+    設計書を生成する。エージェントが担い、設計書は手書きしない。
+  status: review
+  source:
+    doc: agent-src/spec-designer/body.md
+    location: { section: "冒頭" }
+    evidence: "設計書を手書きしません —— 正本はデータ、設計書はそこから生成されるビューです。"
+
+- id: fn-build
+  func_id: F-13
+  name: スキルビルド・配布
+  category: 配布
+  description: >-
+    単一ソースから .claude/ と .github/ の両方へ同一内容を展開し、展開先
+    リポジトリのルートに解凍するだけで導入できる配布物 zip を作成する。
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "スキルとしての配布" }
+    evidence: "dist/docextract-skill.zip 上記をまとめた配布物 (展開先リポジトリのルートに解凍するだけで導入完了)"

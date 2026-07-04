@@ -1,0 +1,8 @@
+# 利用する — エージェントが実行手段とするスキル・モジュール
+
+- { type: uses, from: ag-indexer, to: sk-docextract, status: approved }
+- { type: uses, from: ag-indexer, to: mod-docagent,  status: approved }
+- { type: uses, from: ag-spec,    to: mod-docagent,  status: approved }
+- { type: uses, from: ag-qa,      to: mod-docagent,  status: approved }
+- { type: uses, from: ag-designer, to: sk-specdb,    status: review }
+- { type: uses, from: ag-designer, to: mod-docagent, status: review }

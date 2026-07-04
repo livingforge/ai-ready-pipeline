@@ -1,0 +1,69 @@
+# ソースモジュール — リポジトリ内の実装単位（修正は src 側に行い、再ビルドで配布物へ展開する）
+
+- id: mod-docextract
+  name: docextract パッケージ
+  path: docextract/
+  description: >-
+    抽出エンジン本体。形式判定・各形式のエクストラクタ（python-docx /
+    openpyxl / python-pptx / PyMuPDF 系）・OCR・画像内表検出・
+    衝突しない ID の採番・マニフェスト管理を含む。
+  status: approved
+  rules: [dr-01, dr-04]
+  depends:
+    - { lib: lib-python-docx }
+    - { lib: lib-openpyxl }
+    - { lib: lib-python-pptx }
+    - { lib: lib-pdfplumber }
+    - { lib: lib-pypdf }
+    - { lib: lib-rapidocr, note: OCR と画像内表検出（rapid_layout / rapid_table を含む） }
+    - { lib: lib-pillow }
+    - { lib: lib-winocr, note: Windows OCR バックエンド利用時のみ }
+  source:
+    doc: README.md
+    location: { section: "構成" }
+    evidence: "docextract/ ├── __init__.py # extract() エントリポイント・形式判定 … └── extractors/"
+
+- id: mod-docagent
+  name: docagent パッケージ
+  path: docagent/
+  description: >-
+    抽出結果を集約ストア (.docextract/store/) に束ねるデータ操作 CLI / Python
+    モジュール。文書索引 (library.json)・横断検索 (search)・仕様ファクト
+    (facts.json) の操作を提供し、3 エージェントの実行手段となる。
+  status: approved
+  rules: [dr-02, dr-03, dr-04]
+  source:
+    doc: docagent/README.md
+    location: { section: "データ操作 API（docagent）" }
+    evidence: "抽出結果を集約 JSON に束ね、後工程が使う操作を提供する CLI / Python モジュール。"
+
+- id: mod-specdb
+  name: specdb エンジン
+  path: .claude/skills/specdb/scripts/（正本は specdb/）
+  description: >-
+    メタモデル駆動の汎用エンジン。ローダ/バリデータ/クエリ API (engine.py)・
+    文書ジェネレータ (generate.py)・ベースライン差分 (diff.py)・
+    対話型グラフビューア (visualize.py) から成る。特定のアイテム種別を知らない。
+  status: approved
+  rules: [dr-03, dr-04, dr-06]
+  depends:
+    - { lib: lib-pyyaml }
+    - { lib: lib-jinja2 }
+  source:
+    doc: specdb/README.md
+    location: { section: "構成" }
+    evidence: "engine.py # 汎用エンジン: ローダ/バリデータ/クエリ API（種別非依存）"
+
+- id: mod-build
+  name: スキルビルドスクリプト
+  path: scripts/build_skill.py
+  description: >-
+    単一ソース（skill-src/ + agent-src/ + 本体パッケージ）から .claude/ と
+    .github/ の両方へ同一内容を展開し、配布物 zip を作成する。SKILL.md と
+    エージェント定義は「共通 body + プラットフォーム別フロントマター」から組み立てる。
+  status: approved
+  rules: [dr-04, dr-05]
+  source:
+    doc: README.md
+    location: { section: "スキルとしての配布" }
+    evidence: "単一のソース skill-src/ (スキル) + agent-src/ (エージェント) + 本体パッケージ docextract/ から、ビルドスクリプトが .claude/ と .github/ の両方へ同一内容を出力する"

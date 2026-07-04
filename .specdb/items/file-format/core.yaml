@@ -1,0 +1,45 @@
+# 対応文書形式 — docextract が抽出できる形式と、出典位置情報の粒度
+
+- id: fmt-docx
+  name: Word
+  extensions: .docx
+  contents: 段落（スタイル名付き）・表・インライン画像・テキストボックス — 文書内の出現順
+  location_keys: order（文書内の出現順）
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "対応形式" }
+    evidence: "Word .docx 段落 (スタイル名付き)・表・インライン画像 — 文書内の出現順"
+
+- id: fmt-xlsx
+  name: Excel
+  extensions: .xlsx / .xlsm
+  contents: シートごとの表（数式は計算結果）・埋め込み画像（アンカーセル付き）
+  location_keys: sheet（シート名）、画像は anchor（A1 形式のセル）
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "対応形式" }
+    evidence: "Excel .xlsx .xlsm シートごとの表 (数式は計算結果)・埋め込み画像 (アンカーセル付き)"
+
+- id: fmt-pptx
+  name: PowerPoint
+  extensions: .pptx
+  contents: テキストフレーム・表・画像（スライド番号付き）・発表者ノート
+  location_keys: slide（スライド番号）、shape_name
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "対応形式" }
+    evidence: "PowerPoint .pptx テキストフレーム・表・画像 (スライド番号付き)・発表者ノート"
+
+- id: fmt-pdf
+  name: PDF
+  extensions: .pdf
+  contents: テキスト段落・表（罫線ベースの自動検出）・埋め込み画像
+  location_keys: page（ページ番号）、bbox（座標 [x0, y0, x1, y1]）
+  status: approved
+  source:
+    doc: README.md
+    location: { section: "対応形式" }
+    evidence: "PDF .pdf テキスト段落・表 (自動検出)・埋め込み画像 — ページ番号と座標 (bbox) 付き"

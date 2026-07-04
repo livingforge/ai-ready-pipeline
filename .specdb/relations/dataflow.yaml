@@ -1,0 +1,48 @@
+# データフロー — 構成要素がデータ成果物を生成する (produces) / 入力とする (consumes)。
+# 「資料の山 → 検証可能な仕様データ → 生成される設計書」のパイプラインの正本。
+
+# --- 生成する -------------------------------------------------------------
+
+- { type: produces, from: sk-docextract, to: ar-result,   status: approved }
+- { type: produces, from: sk-docextract, to: ar-manifest, status: approved }
+- type: produces
+  from: ag-indexer
+  to: ar-library
+  note: docagent sync で抽出マニフェストから一括登録し、set-doctype で文書種別を付与する
+  status: approved
+- type: produces
+  from: ag-spec
+  to: ar-facts
+  note: fact-add で 1 項目ずつ蓄積。search で location を接地してから登録する
+  status: approved
+- type: produces
+  from: sk-specdb
+  to: ar-gendoc
+  note: 検証を通過した仕様データのみから生成される（error があれば中止）
+  status: approved
+- { type: produces, from: mod-build, to: ar-dist, status: approved }
+- type: produces
+  from: ag-designer
+  to: ar-specdata
+  note: 仕様ファクト・資料・指示から items/relations を起こし、source（出典）を引き継ぐ
+  status: review
+
+# --- 入力とする -----------------------------------------------------------
+
+- { type: consumes, from: ag-designer, to: ar-facts, status: review }
+
+- { type: consumes, from: ag-indexer, to: ar-result,   status: approved }
+- { type: consumes, from: ag-indexer, to: ar-manifest, status: approved }
+- { type: consumes, from: ag-spec,    to: ar-library,  status: approved }
+- { type: consumes, from: ag-spec,    to: ar-result,   status: approved }
+- { type: consumes, from: ag-qa,      to: ar-library,  status: approved }
+- { type: consumes, from: ag-qa,      to: ar-facts,    status: approved }
+- type: consumes
+  from: sk-specdb
+  to: ar-specdata
+  note: 仕様ファクト (facts.json) からの変換は現状 Claude が補助する（自動アダプタ未実装）
+  status: approved
+  source:
+    doc: .claude/skills/specdb/SKILL.md
+    location: { section: "docextract / spec-extractor との関係" }
+    evidence: "自動取り込みアダプタは未実装なので、現状は抽出済みファクトから items/*.yaml を起こす（Claude が変換を手伝う）。"

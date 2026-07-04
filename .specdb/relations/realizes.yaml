@@ -1,0 +1,30 @@
+# 実現する — 機能一覧（function）と構成要素の対応。
+# cardinality to: "1..*" により、実現主体のいない機能は検証 error になる。
+
+- { type: realizes, from: mod-docextract, to: fn-extract,   status: approved }
+- { type: realizes, from: sk-docextract,  to: fn-extract,   status: approved }
+- { type: realizes, from: mod-docextract, to: fn-id,        status: approved }
+- { type: realizes, from: mod-docextract, to: fn-ocr,       status: approved }
+- { type: realizes, from: mod-docextract, to: fn-imgtable,  status: approved }
+
+- { type: realizes, from: ag-indexer,     to: fn-batch,     status: approved }
+- { type: realizes, from: mod-docagent,   to: fn-batch,     status: approved }
+- { type: realizes, from: ag-indexer,     to: fn-doctype,   status: approved }
+- { type: realizes, from: mod-docagent,   to: fn-doctype,   status: approved }
+- { type: realizes, from: ag-qa,          to: fn-search,    status: approved }
+- { type: realizes, from: mod-docagent,   to: fn-search,    status: approved }
+- { type: realizes, from: ag-spec,        to: fn-facts,     status: approved }
+- { type: realizes, from: mod-docagent,   to: fn-facts,     status: approved }
+
+- { type: realizes, from: sk-specdb,      to: fn-validate,  status: approved }
+- { type: realizes, from: mod-specdb,     to: fn-validate,  status: approved }
+- { type: realizes, from: sk-specdb,      to: fn-generate,  status: approved }
+- { type: realizes, from: mod-specdb,     to: fn-generate,  status: approved }
+- { type: realizes, from: sk-specdb,      to: fn-diff,      status: approved }
+- { type: realizes, from: mod-specdb,     to: fn-diff,      status: approved }
+- { type: realizes, from: sk-specdb,      to: fn-visualize, status: review }
+- { type: realizes, from: mod-specdb,     to: fn-visualize, status: review }
+
+- { type: realizes, from: ag-designer,    to: fn-author,    status: review }
+
+- { type: realizes, from: mod-build,      to: fn-build,     status: approved }
