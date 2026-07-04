@@ -57,7 +57,10 @@ def git_rev(root: Path) -> str:
 
 def make_env(store: Store, templates_dir: Path) -> Environment:
     env = Environment(loader=FileSystemLoader(templates_dir),
-                      trim_blocks=True, lstrip_blocks=True)
+                      trim_blocks=True, lstrip_blocks=True,
+                      # HTML 文書ではアイテム値の < & " を自動エスケープする
+                      # （Markdown 等それ以外のテンプレートには影響しない）
+                      autoescape=lambda name: bool(name) and ".html" in name)
     env.filters["status"] = lambda s: STATUS_LABEL.get(s, s)
     env.filters["source"] = fmt_source
     env.filters["evidence"] = fmt_evidence

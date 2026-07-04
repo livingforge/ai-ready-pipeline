@@ -1,0 +1,239 @@
+{#-
+  基本設計書（Excel 風 HTML）— 伝統的な設計書の情報設計で仕様データを描画する。
+
+  章立て:  1 概要（前書き + 画面-テーブル関連図）
+           2 画面仕様（1 画面 1 シート: 概要枠・レイアウト模式図・表示項目・関連ルール）
+           3 テーブル定義（1 テーブル 1 シート: 概要枠・列定義・関連ルール）
+           4 データ辞書  5 業務ルール  付録 出典一覧
+  本文は日本語名称を主体にし、ID・出典・原文は付録に集約する。
+-#}
+{% import "_excel.html.j2" as ex %}
+{% set screens = store.items_of('screen') %}
+{% set entities = store.items_of('entity') %}
+{% set ditems = store.items_of('data-item') %}
+{% set rules = store.items_of('business-rule') %}
+{{ ex.page_start(doc.title) }}
+{{ ex.cover(doc.title, doc.doc_no, doc.version, generated_at[:10], 'specdb（自動生成）',
+            '本書は仕様データから自動生成されたビューです。直接編集しないでください。') }}
+
+{% call ex.sheet('改訂履歴', doc.title, doc.doc_no, doc.version) %}
+{{ ex.rev_history([{'version': doc.version, 'date': generated_at[:10],
+                    'note': '初版（データ版 ' ~ data_rev ~ ' から自動生成）', 'author': 'specdb'}]) }}
+{% endcall %}
+
+{# ---- 目次（章構成はデータから組み立てる） ------------------------------ #}
+{% set toc_entries = [{'no': '1', 'sheet': '1. 概要', 'desc': '目的・対象範囲・前提、画面とテーブルの関連図'}] %}
+{% for s in screens %}
+  {% set _ = toc_entries.append({'no': '2.' ~ loop.index, 'sheet': '2.' ~ loop.index ~ ' ' ~ s.attrs.name,
+                                 'desc': s.attrs.description}) %}
+{% endfor %}
+{% for e in entities %}
+  {% set _ = toc_entries.append({'no': '3.' ~ loop.index, 'sheet': '3.' ~ loop.index ~ ' ' ~ e.attrs.name,
+                                 'desc': e.attrs.description}) %}
+{% endfor %}
+{% set _ = toc_entries.append({'no': '4', 'sheet': '4. データ辞書', 'desc': 'データ項目の型・桁・値域の正本'}) %}
+{% set _ = toc_entries.append({'no': '5', 'sheet': '5. 業務ルール', 'desc': '業務上の制約と適用先'}) %}
+{% set _ = toc_entries.append({'no': '付録', 'sheet': '付録 出典一覧', 'desc': '各記載の出典（元文書・箇所・原文）'}) %}
+{% call ex.sheet('目次', doc.title, doc.doc_no, doc.version) %}
+{{ ex.toc(toc_entries) }}
+{% endcall %}
+
+{# ---- 1. 概要 ----------------------------------------------------------- #}
+{% call ex.sheet('1. 概要', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('1.1', '目的') }}
+{{ ex.prose(doc.preface.purpose) }}
+{{ ex.sec('1.2', '対象範囲') }}
+{{ ex.prose(doc.preface.scope) }}
+{{ ex.sec('1.3', '前提') }}
+{{ ex.prose(doc.preface.premise) }}
+{{ ex.sec('1.4', '全体構成') }}
+{# 画面とテーブルの関連 = 「画面が表示する項目」と「テーブルが持つ列」の重なり #}
+{% set edges = [] %}
+{% for s in screens %}
+  {% set si = loop.index0 %}
+  {% set sitems = store.relations_of('displays', src=s.id)|map(attribute='dst')|list %}
+  {% for e in entities %}
+    {% set common = store.relations_of('has-column', src=e.id)|map(attribute='dst')|select('in', sitems)|list %}
+    {% if common %}{% set _ = edges.append([si, loop.index0]) %}{% endif %}
+  {% endfor %}
+{% endfor %}
+{% set left = [] %}
+{% for s in screens %}{% set _ = left.append({'label': s.attrs.name, 'sub': s.attrs.screen_id}) %}{% endfor %}
+{% set right = [] %}
+{% for e in entities %}{% set _ = right.append({'label': e.attrs.name, 'sub': e.attrs.physical_name}) %}{% endfor %}
+{% call ex.fig('図 1-1　画面とテーブルの関連（表示項目と列の対応から自動生成）') %}
+{{ ex.bipartite(left, right, edges, '画面', 'テーブル') }}
+{% endcall %}
+{% endcall %}
+
+{# ---- 2. 画面仕様（1 画面 1 シート） ------------------------------------ #}
+{% for s in screens %}
+{% set ch = '2.' ~ loop.index %}
+{% set disp = store.relations_of('displays', src=s.id) %}
+{% call ex.sheet(ch ~ ' ' ~ s.attrs.name, doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec(ch, '画面仕様　' ~ s.attrs.name) }}
+{{ ex.kv([('画面ID', s.attrs.screen_id), ('画面名', s.attrs.name),
+          ('概要', s.attrs.description), ('状態', s.status|status)]) }}
+{{ ex.subsec(ch ~ '.1', '画面レイアウト') }}
+{% call ex.fig('図 ' ~ ch ~ '-1　' ~ s.attrs.name ~ '（表示項目からの自動配置による模式図）') %}
+{{ ex.wireframe_list(s.attrs.name, disp|map(attribute='dst')|map('item_label')|list) }}
+{% endcall %}
+{{ ex.subsec(ch ~ '.2', '表示項目') }}
+<table class="xl">
+  <tr>
+    <th style="width:5%">項番</th><th style="width:16%">項目名</th>
+    <th style="width:8%">型</th><th style="width:6%">桁</th>
+    <th style="width:18%">値域</th><th>備考</th><th style="width:9%">状態</th>
+  </tr>
+  {% for rel in disp %}
+  {% set it = store.items[rel.dst] %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ it.attrs.name }}</td>
+    <td class="c">{{ it.attrs.type }}</td>
+    <td class="c">{{ it.attrs.length if it.attrs.length else '—' }}</td>
+    <td>{{ it.attrs.domain if it.attrs.domain else '—' }}</td>
+    <td>{{ rel.attrs.note if rel.attrs.note else '' }}</td>
+    {{ ex.status_td(rel) }}
+  </tr>
+  {% endfor %}
+</table>
+<p class="hint">型・桁・値域はデータ辞書（第4章）からの転記。</p>
+{{ ex.subsec(ch ~ '.3', '関連する業務ルール') }}
+{% set targets = disp|map(attribute='dst')|list + [s.id] %}
+{% set srules = store.relating_to('constrains', targets) %}
+{% if srules %}
+<table class="xl">
+  <tr><th style="width:5%">項番</th><th>ルール</th><th style="width:20%">適用先</th><th style="width:9%">状態</th></tr>
+  {% for r in srules %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ r.attrs.statement }}</td>
+    <td>{{ store.relations_of('constrains', src=r.id)|map(attribute='dst')|select('in', targets)|map('item_label')|join('、') }}</td>
+    {{ ex.status_td(r) }}
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+{{ ex.prose('この画面に関連する業務ルールはない。') }}
+{% endif %}
+{% endcall %}
+{% endfor %}
+
+{# ---- 3. テーブル定義（1 テーブル 1 シート） ---------------------------- #}
+{% for e in entities %}
+{% set ch = '3.' ~ loop.index %}
+{% set cols = store.relations_of('has-column', src=e.id) %}
+{% call ex.sheet(ch ~ ' ' ~ e.attrs.name, doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec(ch, 'テーブル定義　' ~ e.attrs.name) }}
+{{ ex.kv([('論理名', e.attrs.name), ('物理名', e.attrs.physical_name),
+          ('概要', e.attrs.description), ('状態', e.status|status)]) }}
+{{ ex.subsec(ch ~ '.1', '列定義') }}
+<table class="xl">
+  <tr>
+    <th style="width:5%">No</th><th style="width:16%">列名</th>
+    <th style="width:18%">物理名</th><th style="width:8%">型</th>
+    <th style="width:6%">桁</th><th style="width:5%">PK</th>
+    <th style="width:6%">必須</th><th>備考</th>
+  </tr>
+  {% for rel in cols %}
+  {% set it = store.items[rel.dst] %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ it.attrs.name }}</td>
+    <td>{{ rel.attrs.physical_name }}</td>
+    <td class="c">{{ it.attrs.type }}</td>
+    <td class="c">{{ it.attrs.length if it.attrs.length else '—' }}</td>
+    <td class="c">{{ '○' if rel.attrs.pk else '' }}</td>
+    <td class="c">{{ '○' if rel.attrs.required else '' }}</td>
+    <td>{{ rel.attrs.note if rel.attrs.note else '' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="hint">型・桁はデータ辞書（第4章）からの転記。</p>
+{{ ex.subsec(ch ~ '.2', '関連する業務ルール') }}
+{% set ctargets = cols|map(attribute='dst')|list %}
+{% set erules = store.relating_to('constrains', ctargets) %}
+{% if erules %}
+<table class="xl">
+  <tr><th style="width:5%">項番</th><th>ルール</th><th style="width:20%">適用先の列</th><th style="width:9%">状態</th></tr>
+  {% for r in erules %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ r.attrs.statement }}</td>
+    <td>{{ store.relations_of('constrains', src=r.id)|map(attribute='dst')|select('in', ctargets)|map('item_label')|join('、') }}</td>
+    {{ ex.status_td(r) }}
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+{{ ex.prose('このテーブルに関連する業務ルールはない。') }}
+{% endif %}
+{% endcall %}
+{% endfor %}
+
+{# ---- 4. データ辞書 ------------------------------------------------------ #}
+{% call ex.sheet('4. データ辞書', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('4', 'データ辞書') }}
+{{ ex.prose('システムで扱うデータ項目の正本。画面・テーブルの型・桁は本章から転記される。') }}
+<table class="xl">
+  <tr>
+    <th style="width:5%">項番</th><th style="width:14%">項目名</th>
+    <th style="width:8%">型</th><th style="width:6%">桁</th>
+    <th style="width:16%">値域</th><th>説明</th><th style="width:9%">状態</th>
+  </tr>
+  {% for it in ditems %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ it.attrs.name }}</td>
+    <td class="c">{{ it.attrs.type }}</td>
+    <td class="c">{{ it.attrs.length if it.attrs.length else '—' }}</td>
+    <td>{{ it.attrs.domain if it.attrs.domain else '—' }}</td>
+    <td>{{ it.attrs.description }}</td>
+    {{ ex.status_td(it) }}
+  </tr>
+  {% endfor %}
+</table>
+{% endcall %}
+
+{# ---- 5. 業務ルール ------------------------------------------------------ #}
+{% call ex.sheet('5. 業務ルール', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('5', '業務ルール') }}
+{{ ex.prose('業務上の制約の一覧。適用先はデータ項目・画面の名称で示す。') }}
+<table class="xl">
+  <tr><th style="width:5%">項番</th><th>ルール</th><th style="width:22%">適用先</th><th style="width:9%">状態</th></tr>
+  {% for r in rules %}
+  <tr>
+    <td class="c">{{ loop.index }}</td>
+    <td>{{ r.attrs.statement }}</td>
+    <td>{{ store.relations_of('constrains', src=r.id)|map(attribute='dst')|map('item_label')|join('、') }}</td>
+    {{ ex.status_td(r) }}
+  </tr>
+  {% endfor %}
+</table>
+{% endcall %}
+
+{# ---- 付録: 出典一覧（本文から追い出した ID・出典・原文を集約） ---------- #}
+{% set srcrows = [] %}
+{% for t in ['screen', 'entity', 'data-item', 'business-rule'] %}
+  {% for it in store.items_of(t) %}
+    {% if it.source %}
+      {% set _ = srcrows.append({'name': it.label(store.mm)|truncate(40),
+                                 'kind': store.mm.item_types[t].label,
+                                 'id': it.id, 'src': it.source}) %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+{% for rel in store.relations %}
+  {% if rel.source %}
+    {% set _ = srcrows.append({'name': rel.src|item_label ~ ' → ' ~ rel.dst|item_label,
+                               'kind': store.mm.relation_types[rel.type].label,
+                               'id': rel.type, 'src': rel.source}) %}
+  {% endif %}
+{% endfor %}
+{% call ex.sheet('付録 出典一覧', doc.title, doc.doc_no, doc.version) %}
+{{ ex.sec('付録', '出典一覧（トレーサビリティ）') }}
+{{ ex.prose('本文の各記載がどの資料のどこに由来するかの一覧。本文では名称のみを示し、ID・出典・原文はここに集約する。') }}
+{{ ex.appendix_sources(srcrows) }}
+{% endcall %}
+{{ ex.page_end() }}
