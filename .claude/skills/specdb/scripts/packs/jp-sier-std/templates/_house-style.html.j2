@@ -1,0 +1,420 @@
+{#-
+  _excel.html.j2 — 伝統的な日本の Excel 設計書風 HTML の共通部品集
+
+  見た目（様式）だけでなく設計書の情報設計を担う部品を提供する:
+    - 章立て: toc（クリックで移動できる目次）/ sec / subsec（章番号つき見出し）
+    - 概要枠: kv（項目:値の縦型枠）/ prose（前書き・説明文）
+    - 図: fig + bipartite（2 部グラフの関連図）/ wireframe_list（一覧画面の模式図）
+    - 節形式: rule_article（規則・ルールを見出し+本文で。ID/出典は従属表示）
+    - トレーサビリティ: appendix_sources（出典一覧の付録シート）
+    - 様式: page_start/page_end / cover（ハンコ枠つき表紙）/ sheet / rev_history
+
+  文書テンプレートからの使い方:
+
+      {% import "_excel.html.j2" as ex %}
+      {{ ex.page_start(doc.title) }}
+      {{ ex.cover(doc.title, doc.doc_no, doc.version, generated_at[:10]) }}
+      {% call ex.sheet('1. 概要', doc.title, doc.doc_no, doc.version) %}
+        {{ ex.sec('1', '概要') }}
+        {{ ex.prose(doc.preface.purpose) }}
+      {% endcall %}
+      ...
+      {{ ex.page_end() }}
+
+  - 各 sheet は Excel のワークシートとして画面下部のシートタブで切り替わる。
+    data-goto="<シート名>" を持つ要素をクリックしても移動できる（目次が使う）
+  - 印刷（ブラウザの PDF 保存）では全シートが A4 横で順に展開される
+  - 自己完結 HTML（依存・CDN なし）。このファイルは部品集なので
+    documents/*.yaml から直接指定しない
+-#}
+
+{%- macro css() -%}
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #b8bcc0;
+         font-family: "MS PGothic", "MS Pゴシック", "Yu Gothic UI", Meiryo, sans-serif;
+         font-size: 12px; line-height: 1.55; color: #000; }
+  .book { max-width: 1180px; margin: 0 auto; padding: 18px 18px 64px; }
+
+  /* ワークシート: 白地 + Excel 方眼紙風の薄い格子 */
+  .sheet { display: none; position: relative; min-height: 640px;
+           padding: 26px 30px; margin-bottom: 18px;
+           border: 1px solid #7f7f7f; box-shadow: 3px 3px 8px rgba(0,0,0,.3);
+           background-color: #fff;
+           background-image: linear-gradient(#ececec 1px, transparent 1px),
+                             linear-gradient(90deg, #ececec 1px, transparent 1px);
+           background-size: 20px 20px; }
+  .sheet.active { display: block; }
+
+  /* 罫線だらけの表 */
+  table.xl { border-collapse: collapse; width: 100%; background: #fff; }
+  table.xl th, table.xl td { border: 1px solid #7f7f7f; padding: 3px 7px;
+                             vertical-align: top; text-align: left; }
+  table.xl th { background: #d9ead3; text-align: center; font-weight: bold; }
+  td.c, th.c { text-align: center; }
+  td.num { text-align: right; }
+
+  /* シート先頭のヘッダー枠（文書名・シート名・文書番号・版）。
+     table-layout: fixed + 各セルの %幅で、内容に依らず全シートで横幅比率を固定する */
+  table.sheet-head { margin-bottom: 14px; table-layout: fixed; }
+  table.sheet-head th { background: #c6d9b0; }
+  table.sheet-head td { overflow: hidden; text-overflow: ellipsis; }
+
+  /* 章番号つき見出し */
+  h2.sec { font-size: 14px; margin: 16px 0 6px; padding: 3px 10px;
+           border-left: 6px solid #538135; background: #ebf1de; }
+  h3.subsec { font-size: 12px; margin: 14px 0 4px; padding: 1px 8px;
+              border-left: 4px solid #9bbb59; background: #f4f8ec; }
+
+  /* 概要枠（項目:値の縦型） */
+  table.kv { width: auto; min-width: 60%; margin: 6px 0 10px; }
+  table.kv th { width: 130px; background: #c6d9b0; font-weight: normal; }
+  table.kv td { min-width: 260px; }
+
+  /* 前書き・説明文（方眼の上に白裏地で載せる） */
+  .prose { background: #fff; border: 1px solid #7f7f7f; padding: 8px 14px;
+           margin: 6px 0 10px; max-width: 72em; }
+  .prose p { margin: 4px 0; }
+
+  /* 目次: 行クリックで該当シートへ */
+  .goto { cursor: pointer; }
+  tr.goto:hover td { background: #eaf3e2; }
+  .hint { font-size: 11px; color: #666; margin: 6px 0 0; }
+
+  /* 節形式（規則・ルールの記事枠）。ID・出典は従属表示 */
+  article.article { background: #fff; border: 1px solid #7f7f7f;
+                    padding: 6px 12px 8px; margin: 0 0 10px; }
+  article.article h3.subsec { margin-top: 2px; }
+  article.article p { margin: 4px 0; }
+  p.meta { font-size: 11px; color: #666; border-top: 1px dashed #aaa;
+           margin-top: 8px; padding-top: 4px; }
+  .idtag { font-family: Consolas, "Courier New", monospace; font-size: 10px;
+           color: #888; }
+
+  /* 図（白裏地 + キャプション） */
+  figure.fig { background: #fff; border: 1px solid #7f7f7f; margin: 8px 0 12px;
+               padding: 10px; text-align: center; overflow-x: auto; }
+  figure.fig figcaption { font-size: 11px; color: #555; margin-top: 6px; }
+  svg.diagram, svg.wf { max-width: 100%; }
+  svg text { font-family: inherit; font-size: 11px; fill: #000; }
+  svg .box { fill: #fff; stroke: #538135; stroke-width: 1.2; }
+  svg .edge { stroke: #7f7f7f; }
+  svg .sub { font-size: 9px; fill: #777; }
+  svg .coltitle { font-weight: bold; }
+  svg .label { font-size: 10px; fill: #333; }
+  svg.wf .frame { fill: #fff; stroke: #555; }
+  svg.wf .titlebar { fill: #dce6f1; stroke: #555; }
+  svg.wf .wftitle { font-size: 12px; font-weight: bold; }
+  svg.wf .area { fill: #fdfdfd; stroke: #999; stroke-dasharray: 3 2; }
+  svg.wf .btn { fill: #f0f0f0; stroke: #555; }
+  svg.wf .th { fill: #d9ead3; stroke: #7f7f7f; }
+  svg.wf .cell { fill: #fff; stroke: #bbb; }
+
+  /* 状態のセル色（Excel の条件付き書式風） */
+  .st-draft      { background: #f2f2f2; }
+  .st-review     { background: #fff2cc; }
+  .st-approved   { background: #fff; }
+  .st-deprecated { background: #f2f2f2; color: #808080; text-decoration: line-through; }
+
+  /* 出典セル: ホバーで原文（evidence）をツールチップ表示 */
+  td.src { color: #1f4e79; cursor: help; }
+
+  /* 表紙 */
+  .cover-sheet { padding-top: 40px; }
+  .hanko-wrap { display: flex; justify-content: flex-end; }
+  table.hanko { border-collapse: collapse; }
+  table.hanko th { width: 74px; border: 1px solid #000; background: #d9ead3;
+                   padding: 3px; text-align: center; font-weight: normal; }
+  table.hanko td { height: 74px; border: 1px solid #000; background: #fff;
+                   text-align: center; vertical-align: middle; }
+  .stamp { display: inline-block; width: 54px; height: 54px; line-height: 54px;
+           border: 2.5px solid #d33a2c; border-radius: 50%; color: #d33a2c;
+           font-size: 12px; font-weight: bold; transform: rotate(-8deg);
+           background: rgba(255,255,255,.85); }
+  .cover-body { display: flex; flex-direction: column; align-items: center;
+                padding-top: 70px; }
+  .cover-title { border: 3px double #000; background: #fff; padding: 26px 60px;
+                 font-size: 30px; font-weight: bold; letter-spacing: .25em; }
+  table.cover-meta { border-collapse: collapse; margin-top: 48px; }
+  table.cover-meta th { width: 110px; border: 1px solid #000; background: #d9ead3;
+                        padding: 5px 10px; font-weight: normal; text-align: center; }
+  table.cover-meta td { width: 240px; border: 1px solid #000; background: #fff;
+                        padding: 5px 10px; text-align: center; }
+  .cover-note { margin-top: 44px; color: #444; }
+
+  /* シートタブ（Excel 風・画面下部固定） */
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+            display: flex; flex-wrap: wrap; gap: 2px; padding: 0 10px 4px;
+            background: #e6e6e6; border-top: 1px solid #7f7f7f; }
+  .tabbar button { border: 1px solid #999; border-top: none; cursor: pointer;
+                   background: #f4f4f4; color: #333; font: inherit;
+                   padding: 4px 14px 5px; border-radius: 0 0 7px 7px; }
+  .tabbar button.active { background: #fff; font-weight: bold; color: #000;
+                          border-bottom: 3px solid #217346; }
+
+  /* 印刷: タブを消し、全シートを A4 横で順に出す */
+  @media print {
+    body { background: #fff; }
+    .book { max-width: none; padding: 0; }
+    .tabbar { display: none; }
+    .hint { display: none; }
+    .sheet { display: block; min-height: 0; margin: 0; padding: 0 0 8mm;
+             border: none; box-shadow: none; background-image: none;
+             page-break-after: always; }
+    .sheet:last-of-type { page-break-after: auto; }
+  }
+  @page { size: A4 landscape; margin: 12mm; }
+</style>
+{%- endmacro -%}
+
+{%- macro js() -%}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var sheets = [].slice.call(document.querySelectorAll('.sheet'));
+    var bar = document.getElementById('tabbar');
+    var buttons = [];
+    function activate(i) {
+      sheets.forEach(function (x, j) { x.classList.toggle('active', i === j); });
+      buttons.forEach(function (b, j) { b.classList.toggle('active', i === j); });
+      window.scrollTo(0, 0);
+    }
+    sheets.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.textContent = s.getAttribute('data-name');
+      b.addEventListener('click', function () { activate(i); });
+      bar.appendChild(b);
+      buttons.push(b);
+    });
+    if (sheets.length) { activate(0); }
+    /* data-goto="<シート名>" を持つ要素（目次の行など）で移動できる */
+    document.body.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
+      if (!t) { return; }
+      var name = t.getAttribute('data-goto');
+      sheets.forEach(function (s, i) {
+        if (s.getAttribute('data-name') === name) { activate(i); }
+      });
+    });
+  });
+</script>
+{%- endmacro -%}
+
+{# ---- ページ骨格 -------------------------------------------------------- #}
+
+{% macro page_start(title) %}
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+{{ css() }}
+</head>
+<body>
+<main class="book">
+{% endmacro %}
+
+{% macro page_end() %}
+</main>
+<nav class="tabbar" id="tabbar"></nav>
+{{ js() }}
+</body>
+</html>
+{% endmacro %}
+
+{# ---- 表紙（承認・審査・作成のハンコ枠つき） ---------------------------- #}
+
+{% macro hanko(labels=('承認', '審査', '作成'), stamp_last='自動') %}
+<table class="hanko">
+  <tr>{% for l in labels %}<th>{{ l }}</th>{% endfor %}</tr>
+  <tr>{% for l in labels %}<td>{% if loop.last and stamp_last %}<span class="stamp">{{ stamp_last }}</span>{% endif %}</td>{% endfor %}</tr>
+</table>
+{% endmacro %}
+
+{% macro cover(title, doc_no='', version='', date='', org='', note='') %}
+<section class="sheet cover-sheet" data-name="表紙">
+  <div class="hanko-wrap">{{ hanko() }}</div>
+  <div class="cover-body">
+    <div class="cover-title">{{ title }}</div>
+    <table class="cover-meta">
+      {% if doc_no %}<tr><th>文書番号</th><td>{{ doc_no }}</td></tr>{% endif %}
+      {% if version %}<tr><th>版数</th><td>{{ version }}</td></tr>{% endif %}
+      {% if date %}<tr><th>発行日</th><td>{{ date }}</td></tr>{% endif %}
+      {% if org %}<tr><th>作成</th><td>{{ org }}</td></tr>{% endif %}
+    </table>
+    {% if note %}<p class="cover-note">{{ note }}</p>{% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+{# ---- ワークシート（call ブロックで本文を渡す） ------------------------- #}
+
+{% macro sheet(name, doc_title='', doc_no='', version='') %}
+<section class="sheet" data-name="{{ name }}">
+  {% if doc_title %}
+  {# 横幅比率は全シート固定（合計 100%）。table-layout: fixed が %幅を厳守する #}
+  <table class="xl sheet-head">
+    <tr>
+      <th style="width:7%">文書名</th><td style="width:40%">{{ doc_title }}</td>
+      <th style="width:7%">シート</th><td style="width:19%">{{ name }}</td>
+      {% if doc_no %}<th style="width:8%">文書番号</th><td style="width:11%">{{ doc_no }}</td>{% endif %}
+      {% if version %}<th style="width:4%">版</th><td class="c" style="width:4%">{{ version }}</td>{% endif %}
+    </tr>
+  </table>
+  {% endif %}
+  {{ caller() }}
+</section>
+{% endmacro %}
+
+{# ---- 改訂履歴表 -------------------------------------------------------- #}
+
+{% macro rev_history(rows) %}
+<table class="xl">
+  <tr>
+    <th style="width:8%">版数</th><th style="width:13%">日付</th>
+    <th>変更内容</th><th style="width:14%">変更者</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td class="c">{{ r.version }}</td><td class="c">{{ r.date }}</td>
+    <td>{{ r.note }}</td><td class="c">{{ r.author }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endmacro %}
+
+{# ---- 章立て部品 -------------------------------------------------------- #}
+
+{# 目次: entries = [{no, sheet, desc}] 。行クリックで該当シートへ移動する #}
+{% macro toc(entries) %}
+<table class="xl">
+  <tr><th style="width:8%">章</th><th style="width:32%">内容</th><th>概要</th></tr>
+  {% for e in entries %}
+  <tr class="goto" data-goto="{{ e.sheet }}">
+    <td class="c">{{ e.no }}</td><td>{{ e.sheet }}</td><td>{{ e.desc }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="hint">行をクリックすると該当シートへ移動します（画面下部のシートタブでも移動できます）。</p>
+{% endmacro %}
+
+{% macro sec(no, title) %}<h2 class="sec">{{ no }}　{{ title }}</h2>{% endmacro %}
+{% macro subsec(no, title) %}<h3 class="subsec">{{ no }}　{{ title }}</h3>{% endmacro %}
+
+{# 前書き・説明文。文字列 1 つでも段落のリストでも受ける #}
+{% macro prose(paras) %}
+<div class="prose">
+  {% for p in ([paras] if paras is string else paras) %}<p>{{ p }}</p>{% endfor %}
+</div>
+{% endmacro %}
+
+{# 概要枠: rows = [(ラベル, 値), …] #}
+{% macro kv(rows) %}
+<table class="xl kv">
+  {% for r in rows %}<tr><th>{{ r[0] }}</th><td>{{ r[1] }}</td></tr>{% endfor %}
+</table>
+{% endmacro %}
+
+{# ---- 節形式（規則・ルール 1 件 = 見出し + 本文。ID/状態は従属表示） ----- #}
+
+{% macro rule_article(no, title, body, applies='', item=None) %}
+<article class="article">
+  <h3 class="subsec">{{ no }}　{{ title }}</h3>
+  <p>{{ body }}</p>
+  <p class="meta">
+    {% if applies %}適用先: {{ applies }}　{% endif %}
+    {% if item %}状態: {{ item.status|status }}　<span class="idtag">{{ item.id }}</span>{% endif %}
+  </p>
+</article>
+{% endmacro %}
+
+{# ---- 図 ---------------------------------------------------------------- #}
+
+{# キャプションつき図。本体（SVG 等）は call ブロックで渡す #}
+{% macro fig(caption) %}
+<figure class="fig">
+  {{ caller() }}
+  <figcaption>{{ caption }}</figcaption>
+</figure>
+{% endmacro %}
+
+{# 2 部グラフの関連図: left/right = [{label, sub}], edges = [[左idx, 右idx]] #}
+{% macro bipartite(left, right, edges, left_title='', right_title='') %}
+{% set pitch = 50 %}{% set top = 34 %}
+{% set h = top + [left|length, right|length]|max * pitch %}
+<svg class="diagram" width="640" height="{{ h }}" viewBox="0 0 640 {{ h }}" role="img">
+  {% if left_title %}<text x="105" y="16" text-anchor="middle" class="coltitle">{{ left_title }}</text>{% endif %}
+  {% if right_title %}<text x="525" y="16" text-anchor="middle" class="coltitle">{{ right_title }}</text>{% endif %}
+  {% for e in edges %}
+  <line class="edge" x1="200" y1="{{ top + e[0] * pitch + 18 }}"
+        x2="430" y2="{{ top + e[1] * pitch + 18 }}"/>
+  {% endfor %}
+  {% for it in left %}
+  <g transform="translate(10,{{ top + loop.index0 * pitch }})">
+    <rect class="box" width="190" height="36"/>
+    <text x="95" y="{{ 16 if it.sub else 22 }}" text-anchor="middle">{{ it.label }}</text>
+    {% if it.sub %}<text x="95" y="30" text-anchor="middle" class="sub">{{ it.sub }}</text>{% endif %}
+  </g>
+  {% endfor %}
+  {% for it in right %}
+  <g transform="translate(430,{{ top + loop.index0 * pitch }})">
+    <rect class="box" width="190" height="36"/>
+    <text x="95" y="{{ 16 if it.sub else 22 }}" text-anchor="middle">{{ it.label }}</text>
+    {% if it.sub %}<text x="95" y="30" text-anchor="middle" class="sub">{{ it.sub }}</text>{% endif %}
+  </g>
+  {% endfor %}
+</svg>
+{% endmacro %}
+
+{# 一覧系画面の模式図: 表示項目（列名のリスト）から自動配置する #}
+{% macro wireframe_list(title, columns) %}
+{% set W = 600 %}
+{% set n = columns|length if columns else 1 %}
+{% set cw = (W - 24) // n %}
+<svg class="wf" width="{{ W }}" height="240" viewBox="0 0 {{ W }} 240" role="img">
+  <rect class="frame" x="1" y="1" width="{{ W - 2 }}" height="238"/>
+  <rect class="titlebar" x="1" y="1" width="{{ W - 2 }}" height="26"/>
+  <text class="wftitle" x="12" y="19">{{ title }}</text>
+  <rect class="area" x="12" y="38" width="{{ W - 24 }}" height="44"/>
+  <text class="label" x="20" y="55">検索条件</text>
+  <rect class="btn" x="{{ W - 92 }}" y="48" width="68" height="24"/>
+  <text class="label" x="{{ W - 58 }}" y="64" text-anchor="middle">検 索</text>
+  {% for c in columns %}
+  <g transform="translate({{ 12 + loop.index0 * cw }},96)">
+    <rect class="th" width="{{ cw }}" height="26"/>
+    <text x="{{ cw // 2 }}" y="17" text-anchor="middle">{{ c }}</text>
+    {% for r in range(4) %}
+    <rect class="cell" y="{{ 26 + r * 26 }}" width="{{ cw }}" height="26"/>
+    {% endfor %}
+  </g>
+  {% endfor %}
+</svg>
+{% endmacro %}
+
+{# ---- トレーサビリティ付録 ---------------------------------------------- #}
+
+{# 出典一覧: rows = [{name, kind, id, src}] 。本文シートから追い出した
+   ID・出典・原文をここへまとめ、本文は日本語名称主体に保つ #}
+{% macro appendix_sources(rows) %}
+<table class="xl">
+  <tr>
+    <th style="width:18%">対象</th><th style="width:10%">種別</th>
+    <th style="width:14%">ID</th><th style="width:24%">出典</th><th>原文</th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.name }}</td><td class="c">{{ r.kind }}</td>
+    <td><span class="idtag">{{ r.id }}</span></td>
+    <td>{{ r.src|source }}</td><td>{{ r.src|evidence }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endmacro %}
+
+{# ---- セル部品 ---------------------------------------------------------- #}
+
+{# 状態セル: draft/review/approved/deprecated を Excel 風のセル色で #}
+{% macro status_td(item) %}<td class="c st-{{ item.status }}">{{ item.status|status }}</td>{% endmacro %}
+
+{# 出典セル: 本文は doc + location、ホバーで原文 (evidence) を表示 #}
+{% macro source_td(src) %}<td class="src" title="{{ src|evidence }}">{{ src|source }}</td>{% endmacro %}

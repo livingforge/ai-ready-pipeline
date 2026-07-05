@@ -58,3 +58,5 @@
 - { type: produces, from: sk-docsummary, to: ar-summary, status: review }
 - { type: produces, from: sk-docsummary, to: ar-summary-index, status: review }
 - { type: consumes, from: sk-docsummary, to: ar-summary-spec, note: 要約の観点とカテゴリー統制語彙を LLM プロンプトと正規化に使う, status: review }
+- { type: produces, from: mod-build, to: ar-std-pack, note: build_skill が specdb/packs を scripts/packs へ同梱する, status: review }
+- { type: consumes, from: mod-specdb, to: ar-std-pack, note: extends 解決時に standard.py がチェーンとして読み込む, status: review }

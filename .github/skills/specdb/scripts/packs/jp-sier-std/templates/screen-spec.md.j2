@@ -1,0 +1,22 @@
+# {{ doc.title }}
+
+> データ版 {{ data_rev }} から自動生成（{{ generated_at[:10] }}）。本書は仕様データの
+> ビューであり直接編集しない。
+
+{% for s in store.items_of('screen') %}
+## {{ s.attrs.screen_id }}　{{ s.attrs.name }}
+
+- 種別: {{ s.attrs.get('screen_type', '—') }}
+- 説明: {{ s.attrs.description }}
+
+### 表示項目
+
+| 項目名 | 型 | 備考 |
+|--------|----|------|
+{% for d in store.relations_of('displays', src=s.id) -%}
+{% set di = store.items[d.dst] -%}
+| {{ di.attrs.name }} | {{ di.attrs.type }} | {{ d.attrs.get('note', '') }} |
+{% endfor %}
+{% else %}
+（画面は登録されていません。）
+{% endfor %}

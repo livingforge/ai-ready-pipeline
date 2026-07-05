@@ -1,0 +1,21 @@
+# jp-sier-std — 日本 SIer 向け設計書様式標準パック（全社標準の想定）
+#
+# このファイルは配布物（消費側プロジェクトが解決する契約面）。
+# 消費側は metamodel.yaml に `extends: jp-sier-std@1.0` と書いて継承する。
+pack: jp-sier-std
+version: "1.0.0"
+description: 日本 SIer 向け設計書様式標準（画面・テーブル・業務ルール・外部IF）
+
+metamodel: metamodel/core.yaml
+documents: documents
+templates: templates
+conformance: conformance/rules.yaml
+
+# 予約名前空間 — 消費側プロジェクトは再宣言できない（STD-E131）
+reserved_namespaces:
+  std: 標準共通
+
+# 採番戦略（課題1の布石。当面は宣言のみ・engine は未使用）:
+#   名前空間ごとの ID 帯で並行採番の衝突を避ける方針を標準として固定する。
+id_bands:
+  policy: namespace

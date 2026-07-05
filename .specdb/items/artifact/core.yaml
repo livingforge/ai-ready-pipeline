@@ -139,3 +139,15 @@
     doc: docsummary/store.py
     location: {section: docstring}
     evidence: '利用者が定義するのは**出力フォーマットではなく**次の 2 つ:'
+
+- id: ar-std-pack
+  name: 標準パック jp-sier-std
+  path: specdb/packs/jp-sier-std/
+  format: specdb pack
+  description: >-
+    日本 SIer 向けの標準設計書パック。画面・エンティティ・データ項目・業務ルール・外部インターフェースのドメインメタモデル、基本設計書（Excel 風 HTML・block 規約準拠）/ テーブル定義書 / 画面仕様書の文書カタログ、L2 準拠規則（conformance/rules.yaml）を束ねる。ビルドで scripts/packs/ へ同梱され、消費側プロジェクトは metamodel.yaml に extends: jp-sier-std@1.0 と書いて継承する。
+  status: review
+  source:
+    doc: specdb/README.md
+    location: {section: 同梱パック jp-sier-std}
+    evidence: 日本 SIer 向けの実パックを specdb/packs/jp-sier-std/ に同梱している

@@ -179,6 +179,16 @@ L2 はパックの `conformance/rules.yaml` が宣言する規則:
 禁止 = STD-E221）。`pack.lock` は継承チェーンの版・内容ハッシュを固定し、
 `--frozen` でパック差し替えの混入を CI が検出できる（不一致 = STD-W003）。
 
+### 同梱パック jp-sier-std
+
+日本 SIer 向けの実パックを `specdb/packs/jp-sier-std/` に同梱している
+（ビルドで `scripts/packs/` へ展開され、消費側は `extends: jp-sier-std@1.0`
+で解決）。画面・エンティティ・データ項目・業務ルール・外部インターフェースの
+ドメインメタモデルと、基本設計書（Excel 風 HTML・block 規約準拠）/ テーブル
+定義書 / 画面仕様書の文書カタログ、L2 準拠規則を提供する。新しいパックは
+`specdb/packs/<名前>/` に同じ構成（pack.yaml + metamodel/ + documents/ +
+templates/ + conformance/rules.yaml）で足せば同梱される。
+
 ## エンジンが行う汎用検証
 
 - メタモデル自体の整合性（未知の kind、未定義種別への from/to 参照、

@@ -474,19 +474,41 @@ documents/ / rules.yaml は generate.py の既存機構で生成できる
 必要なのはパック記述用メタモデル（doc-type / conformance-rule / style-part）と
 dist 生成テンプレートの整備で、これは最初のパックを作る作業そのもの。
 
-### 段階導入
+### 段階導入と実装状況
 
-1. **Phase 1**: テンプレート検索パス多層化（PrefixLoader 込み）+ 文書
-   from_standard（見た目の統一が即日）
-2. **Phase 2**: extends + マージ + L1 準拠検証 + lock（ガバナンスの機械化。本体）
-   - 並行トラック: **最初のパック（jp-sier-std）を §3.1 の specdb 正本構造で
-     作り始める**（消費側実装と独立に進む。Phase 2 の結合テスト対象を兼ねる）
-3. **Phase 3**: L2 準拠規則（attribute_rules / require_documents / baseline_requires）
-4. **Phase 4**: 章立て検証・移行スクリプト・横断集計ツール（extensible enum の
-   「その他」丸め + 内訳付録を含む）
+1. **Phase 1（完了）**: テンプレート検索パス多層化（PrefixLoader 込み）+ 文書
+   from_standard（standard.py / generate.py）
+2. **Phase 2（完了）**: extends + マージ + L1 準拠検証 + lock
+   （standard.py / conform.py / pack.py / engine.py 結線）
+3. **Phase 3（完了）**: L2 準拠規則（attribute_rules / require_documents /
+   baseline_requires）は Phase 2 に前倒し実装。加えて **最初の実パック
+   jp-sier-std を作成**（`specdb/packs/jp-sier-std/`。画面・テーブル・データ
+   項目・業務ルール・外部IF のドメイン + 基本設計書/テーブル定義書/画面仕様書
+   の文書カタログ + Excel 風ハウススタイル）。build_skill が `scripts/packs/`
+   へ同梱し、消費側は `extends: jp-sier-std@1.0` で解決する。結合テスト
+   test_pack_jp_sier_std.py が extends→マージ→L1/L2→生成を端から端まで固定。
+4. **Phase 4（未）**: 章立て検証・移行スクリプト・横断集計ツール（extensible
+   enum の「その他」丸め + 内訳付録を含む）
 
 各 Phase 完了時に既存プロジェクト（この repo の `.specdb`）を最初の準拠
 プロジェクトとして移行し、ドッグフーディングする。
+
+#### Phase 3 での設計判断: パックの specdb 自己正本化は Phase 3.5 に分離
+
+§3.1 の「パックを specdb で正本化（.specdb → dist を generate）」は、初回の
+実パックでは**採らず、配布物を直接オーサリングした**。理由は実装中に判明した
+generate.py の具体的制約:
+
+- generate は文書定義 1 件につき出力 1 ファイル。dist の `documents/*.yaml`
+  （複数）を生成するには doc-type 1 件ごとに薄い生成定義が要り冗長
+- 出力先が `out/` 固定で、`pack.yaml` や `metamodel/core.yaml` を含む dist
+  ツリー全体の組み立てには別のアセンブラ工程が必要
+
+この摩擦の解消（generate の複数出力・出力先指定・アセンブラ）は独立した
+小改修で、**消費側の契約（§4〜§7）を一切変えない**ため、実パックを先に
+出して機構を実データで固めてから Phase 3.5 として被せる方が安全と判断した。
+決定事項 3（specdb 正本化）は撤回ではなく Phase 3.5 へ繰り延べである。
+（generate に nested 出力の mkdir 対応は先行して入れた。）
 
 ## 11. レビュー決定事項（2026-07-05 — 全論点決着済み）
 

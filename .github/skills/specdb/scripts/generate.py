@@ -125,6 +125,7 @@ def main() -> int:
             doc=doc, store=store, mm=store.mm,
             generated_at=generated_at, data_rev=rev, data_history=data_history)
         dest = out_dir / doc["output"]
+        dest.parent.mkdir(parents=True, exist_ok=True)   # output に副ディレクトリを含めても可
         dest.write_text(text, encoding="utf-8")
         print(f"生成しました: {dest}")
 

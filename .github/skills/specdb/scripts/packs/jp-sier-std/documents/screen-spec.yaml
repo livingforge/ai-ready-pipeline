@@ -1,0 +1,4 @@
+# 画面仕様書 — 全画面の表示項目を列挙する台帳（非 abstract）
+title: 画面仕様書
+output: 画面仕様書.md
+template: screen-spec.md.j2

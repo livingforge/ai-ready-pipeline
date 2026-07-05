@@ -1,0 +1,18 @@
+# jp-sier-std L2 準拠規則 — データ・文書に対する運用要求（conform が検査する）
+#
+# engine の required（常時必須）より緩い「工程連動の記載必須」を表現する。
+
+# 実体化必須の標準文書（欠落 = STD-E201）。基本設計書は必ず作る。
+require_documents: [basic-design]
+
+# 状態連動の記載必須（STD-E211）。engine の required とは別に、
+# 「レビューに出す時点で説明が必要」といった運用要求を課す。
+attribute_rules:
+  - { type: screen,   attribute: description, when_status: [review, approved], level: error }
+  - { type: entity,   attribute: description, when_status: [approved],         level: warn }
+  - { type: external-interface, attribute: description, when_status: [review, approved], level: error }
+
+# ベースライン（Git タグ）作成の前提。--for-baseline 時に review/draft の
+# 残存を error にする（STD-E221）。
+status_rules:
+  baseline_requires: approved

@@ -1,0 +1,100 @@
+# jp-sier-std ドメインメタモデル — SIer の基本設計で扱う標準的な仕様種別
+#
+# 消費側はこれを土台に「追加・厳格化」だけができる（緩和は STD-E1xx で拒否）。
+# 画面・エンティティ（テーブル）・データ項目・業務ルール・外部インターフェースと
+# それらの標準的な関係を宣言する。
+version: 1
+
+item_types:
+
+  screen:
+    label: 画面
+    label_field: name
+    id_prefix: scr-
+    # 画面は関係の起点（from）専用で、どこからも参照されないのが通常。
+    # warn_if_unreferenced は dst 参照だけを見るため screen には設定しない。
+    attributes:
+      name:        { kind: string, required: true }
+      screen_id:   { kind: string, required: true, unique: true }
+      # screen_type は extensible: 消費側は帳票種別等を追加してよい（横断集計は
+      # 標準外の値を「その他」に丸める）
+      screen_type: { kind: enum, values: [入力, 照会, 一覧, 帳票], extensible: true }
+      description: { kind: string, required: true }
+
+  entity:
+    label: エンティティ
+    label_field: name
+    id_prefix: ent-
+    attributes:
+      name:          { kind: string, required: true }
+      physical_name: { kind: string, required: true, unique: true }
+      description:   { kind: string }
+
+  data-item:
+    label: データ項目
+    label_field: name
+    id_prefix: di-
+    warn_if_unreferenced: true
+    attributes:
+      name:        { kind: string, required: true }
+      type:        { kind: enum, values: [数値, 文字列, 日付, 真偽], required: true }
+      length:      { kind: int }
+      description: { kind: string }
+
+  business-rule:
+    label: 業務ルール
+    label_field: statement
+    id_prefix: br-
+    sequence: { attribute: rule_id, format: "BR-{:03d}" }
+    # 業務ルールも constrains の起点（from）専用のため孤児検出の対象にしない。
+    attributes:
+      rule_id:   { kind: string, required: true, unique: true }
+      statement: { kind: string, required: true }
+
+  external-interface:
+    label: 外部インターフェース
+    label_field: name
+    id_prefix: if-
+    attributes:
+      name:        { kind: string, required: true, unique: true }
+      if_id:       { kind: string, required: true, unique: true }
+      direction:   { kind: enum, values: [入力, 出力, 双方向], required: true }
+      protocol:    { kind: string }
+      description: { kind: string, required: true }
+
+relation_types:
+
+  has-column:
+    label: 列
+    from: entity
+    to: data-item
+    cardinality: { from: "1..*" }     # 列を 1 本も持たないテーブルは error
+    ordered: true
+    embedded: { field: columns, target_key: item }
+    attributes:
+      physical_name: { kind: string, required: true, unique: true }
+      pk:            { kind: bool }
+      required:      { kind: bool }
+      note:          { kind: string }
+
+  displays:
+    label: 表示する
+    from: screen
+    to: data-item
+    cardinality: { from: "1..*" }     # 何も表示しない画面は error
+    ordered: true
+    attributes:
+      note: { kind: string }
+
+  constrains:
+    label: 制約する
+    from: business-rule
+    to: [data-item, screen]
+    embedded: { field: applies_to }
+
+  interfaces:
+    label: 連携する
+    from: external-interface
+    to: entity
+    attributes:
+      note: { kind: string }
