@@ -47,6 +47,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "generate": ("generate.py", "設計書を out/ に生成"),
     "diff": ("diff.py", "ベースライン差分"),
     "history": ("history.py", "変更履歴（Git から意味的に再構成）"),
+    "list": ("list.py", "アイテム/関係を status 等で絞って列挙"),
     "visualize": ("visualize.py", "対話型グラフビューア out/specdb.html"),
     "sync-check": ("sync_check.py", "実装と正本の乖離を検出"),
     "mutate": ("mutate.py", "アイテム/関係の追加・変更・承認"),

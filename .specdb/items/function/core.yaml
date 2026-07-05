@@ -267,3 +267,15 @@
     doc: src/skills/docextract/scripts/setup_env.py
     location: {section: docstring}
     evidence: スキル実行環境の構築 — 共有 venv・依存・venv コマンドを一括で用意する
+
+- id: fn-list
+  func_id: F-21
+  name: アイテム/関係の一覧（status 絞り込み）
+  description: >-
+    アイテムと関係を status・種別で絞って列挙する読み取り専用ツール。正本の YAML は書き換えず engine の Store をそのまま読む。ref を mutate の参照形式（アイテムは id、関係は 型:from->to）で出すため、--json 出力の各 ref を plan.json の approve 操作へそのまま渡せる。承認（mutate approve / plan の apply）の前段で対象を機械的に列挙する用途に用いる。
+  category: 仕様管理
+  status: review
+  source:
+    doc: specdb/list.py
+    location: {section: docstring}
+    evidence: 一覧 — アイテム/関係を status などで絞って列挙する（読み取り専用）

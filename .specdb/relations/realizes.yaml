@@ -41,3 +41,5 @@
 - { type: realizes, from: mod-build, to: fn-cli-dispatch, status: review }
 - { type: realizes, from: ag-skill-setup, to: fn-env-setup, status: review }
 - { type: realizes, from: sk-docextract, to: fn-env-setup, status: review }
+- { type: realizes, from: sk-specdb, to: fn-list, status: review }
+- { type: realizes, from: mod-specdb, to: fn-list, status: review }
