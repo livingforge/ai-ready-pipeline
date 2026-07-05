@@ -121,7 +121,8 @@ def collect_history(data_root: Path, item_id: str | None = None,
         return []
     top_path = Path(top)
     prefix = data_root.resolve().relative_to(top_path).as_posix()
-    log = _git("log", "--format=%H%x09%h%x09%ad%x09%an%x09%s", "--date=short",
+    # 変更者は %aN (mailmap 適用後の author 名)。ルートの .mailmap で別名を定義できる。
+    log = _git("log", "--format=%H%x09%h%x09%ad%x09%aN%x09%s", "--date=short",
                "--", prefix, cwd=top_path)
     commits = []
     for line in reversed(log.stdout.splitlines()):
