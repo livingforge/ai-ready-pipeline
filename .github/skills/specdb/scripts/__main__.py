@@ -45,6 +45,8 @@ _force_utf8_io()
 COMMANDS: dict[str, tuple[str, str]] = {
     "engine": ("engine.py", "検証レポート + 統計（error で exit 1）"),
     "generate": ("generate.py", "設計書を out/ に生成"),
+    "conform": ("conform.py", "標準パック準拠検証（L1+L2+lock）"),
+    "pack": ("pack.py", "標準パック補助操作（pack lock）"),
     "diff": ("diff.py", "ベースライン差分"),
     "history": ("history.py", "変更履歴（Git から意味的に再構成）"),
     "list": ("list.py", "アイテム/関係を status 等で絞って列挙"),

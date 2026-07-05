@@ -116,10 +116,10 @@ relation_types:
 
 ## 標準パック（プロジェクト横断の様式標準化 — Phase 1）
 
-設計書様式・文書カタログをプロジェクト間で統一するための仕組み
-（設計の全体像は `.specdb/docs/standard-pack-design.md`。現状は Phase 1 =
-テンプレート多層検索 + 文書カタログの実装。メタモデルのマージ・準拠検証は
-Phase 2 以降）。
+設計書様式・文書カタログ・メタモデルをプロジェクト間で統一するための仕組み
+（設計の全体像は `.specdb/docs/standard-pack-design.md`。Phase 1 = テンプレート
+多層検索 + 文書カタログ、Phase 2 = メタモデルのマージ + 準拠検証 + pack.lock
+まで実装済み）。
 
 ```yaml
 # metamodel.yaml に 1 行足すとパックを継承する（無ければ完全に従来動作）
@@ -151,6 +151,34 @@ doc_no: SD-ORD-001
 preface: { purpose: …, scope: … }
 ```
 
+### メタモデルのマージと準拠検証（Phase 2）
+
+`extends` があると、実効メタモデルは**チェーンをルート（全社）から順に重ねた
+結果**になり、`specdb engine` はそのマージ済みモデルでデータを検証する。
+各層は「その層より下をマージした結果」に対して**緩和禁止**の規則に従う
+（プロジェクト準拠 ⇒ 事業部準拠 ⇒ 全社準拠の推移律）。
+
+- 追加は自由（新種別・新関係・新属性・属性の required 化 = 厳格化）
+- 緩和は error: kind 変更（STD-E101）/ required 緩和（E102）/ unique 除去
+  （E103）/ 非 extensible enum への値追加（E104）/ id_prefix・sequence 変更
+  （E121）/ endpoint 種別削除（E111）/ cardinality 緩和（E112）/ ordered
+  解除・embedded 変更（E113）/ 予約名前空間の再宣言（E131）。診断には
+  どの層がどの層の宣言を緩めたかを `[事業部 → 全社]` の形で含める
+
+```bash
+specdb conform                # L1（メタモデル）+ L2（データ・文書）+ lock 照合
+specdb conform --for-baseline # ベースライン前提（status_rules）も検査
+specdb conform --frozen       # pack.lock 不一致を error 扱い（CI 用）
+specdb pack lock              # 解決結果から pack.lock を生成/更新
+```
+
+L2 はパックの `conformance/rules.yaml` が宣言する規則:
+`require_documents`（実体化必須の標準文書。欠落 = STD-E201）、`attribute_rules`
+（`when_status` に該当する状態で属性の記載を必須化 = STD-E211）、
+`status_rules.baseline_requires`（`--for-baseline` 時、review/draft の残存を
+禁止 = STD-E221）。`pack.lock` は継承チェーンの版・内容ハッシュを固定し、
+`--frozen` でパック差し替えの混入を CI が検出できる（不一致 = STD-W003）。
+
 ## エンジンが行う汎用検証
 
 - メタモデル自体の整合性（未知の kind、未定義種別への from/to 参照、
@@ -175,9 +203,11 @@ error が 1 件でもあれば生成は中止され exit 1（CI で PR をブロ
    名前空間（namespaces）~~（完了）
 6. ~~標準パック Phase 1（テンプレート多層検索 + std/ プレフィックス +
    文書カタログ from_standard）~~（完了。standard.py）
-7. 標準パック Phase 2（メタモデルのマージ + L1 準拠検証 + pack.lock。
+7. ~~標準パック Phase 2（メタモデルのマージ + L1/L2 準拠検証 + pack.lock）~~
+   （完了。standard.py / conform.py / pack.py）
+8. 標準パック Phase 3〜4（章立て検証・移行スクリプト・横断集計ツール。
    設計: .specdb/docs/standard-pack-design.md）
-8. SQLite ビルド、検証プラグイン、docextract/spec-extractor からの
+9. SQLite ビルド、検証プラグイン、docextract/spec-extractor からの
    取り込みアダプタ、Word/Excel 出力、ReqIF エクスポート
 
 まだ表現できないもの（既知の限界）: 関係を対象にした関係（具体化）と 3 項以上の

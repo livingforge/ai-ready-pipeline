@@ -1,18 +1,25 @@
 # -*- coding: utf-8 -*-
-"""標準パック — 継承チェーンの解決と文書カタログ（Phase 1）
+"""標準パック — 継承チェーンの解決・メタモデルマージ・準拠検証・文書カタログ
 
 設計は .specdb/docs/standard-pack-design.md。ここで実装するのは:
+  Phase 1:
   - metamodel.yaml の `extends` から継承チェーン（単一親）を解決する
   - パックの templates/ を多層テンプレート検索・std/ プレフィックス参照に供する
   - パックの文書カタログとプロジェクト文書の from_standard マージ
   - テンプレート上書きの可視化（STD-W301 / STD-W303）
+  Phase 2:
+  - 実効メタモデル = チェーンをルートから重ねたマージ結果（merge_and_check）
+  - L1 準拠検証（緩和の禁止。STD-E101〜E131）
+  - L2 準拠検証（conformance/rules.yaml。STD-E201/E211/E221）
+  - pack.lock の生成・照合（STD-W003）
 
-メタモデルのマージ・L1/L2 準拠検証・pack.lock は Phase 2 以降。
 engine はパックの存在を知らない（「メタモデルの出所」非依存の原則）。
-このモジュールを使うのは generate.py 等の上位ツールだけ。
+Store.load は extends があれば merge_and_check を呼び、マージ済み dict を
+Metamodel に渡すだけ。conform コマンドが L2・lock を追加で回す。
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from dataclasses import dataclass, field
@@ -20,7 +27,7 @@ from pathlib import Path
 
 import yaml
 
-from engine import Problem
+from engine import Problem, _parse_card
 
 TOOL_DIR = Path(__file__).resolve().parent
 
@@ -43,6 +50,25 @@ class Pack:
     @property
     def documents_dir(self) -> Path:
         return self.dir / self.meta.get("documents", "documents")
+
+    @property
+    def conformance_file(self) -> Path:
+        return self.dir / self.meta.get("conformance", "conformance/rules.yaml")
+
+    def metamodel(self) -> dict:
+        """パックのメタモデル宣言。`metamodel:` はファイル or リスト（順にマージ）。"""
+        spec = self.meta.get("metamodel", "metamodel/core.yaml")
+        merged: dict = {}
+        for rel in (spec if isinstance(spec, list) else [spec]):
+            f = self.dir / rel
+            if f.is_file():
+                with open(f, encoding="utf-8") as fh:
+                    merged = _shallow_merge_mm(merged, yaml.safe_load(fh) or {})
+        return merged
+
+    def reserved_namespaces(self) -> dict:
+        ns = self.meta.get("reserved_namespaces") or {}
+        return {n: n for n in ns} if isinstance(ns, list) else dict(ns)
 
 
 def read_extends(root: Path) -> str | None:
@@ -121,6 +147,200 @@ def _load_pack(d: Path, want: tuple | None, spec: str,
                                 f"version '{version}' が不一致"))
         return None
     return Pack(name, version, d, meta)
+
+
+# ---------- メタモデルのマージと L1 準拠検証 ----------
+
+_MM_SECTIONS = ("item_types", "relation_types")
+
+
+def _shallow_merge_mm(base: dict, over: dict) -> dict:
+    """パック内の複数メタモデルファイルを浅くマージする（item_types 等を結合）。"""
+    out = dict(base)
+    for k, v in over.items():
+        if k in _MM_SECTIONS and isinstance(v, dict):
+            out[k] = {**(base.get(k) or {}), **v}
+        else:
+            out[k] = v
+    return out
+
+
+def _card(spec):
+    return None if spec is None else _parse_card(spec)
+
+
+def _card_relaxed(base, over) -> bool:
+    """多重度 over が base より緩いか（min を下げる or max を上げる/外す）。"""
+    if base is None or over is None:
+        return over is None and base is not None   # 宣言を消す = 緩和
+    (bmin, bmax), (omin, omax) = base, over
+    if omin < bmin:
+        return True
+    if bmax is not None and (omax is None or omax > bmax):
+        return True
+    return False
+
+
+def merge_and_check(root: Path, project_data: dict, packs: list[Pack],
+                    problems: list[Problem]) -> dict:
+    """実効メタモデル = チェーンをルート（全社）から順に重ねた結果。
+
+    各層は「その層より下をマージした結果」に対して §6 の緩和禁止規則に従う
+    （L1 準拠検証）。違反は problems に STD-E1xx を積み、マージ自体は続行する
+    （engine が後続の検証を回せるよう、可能な限り実効モデルを組み立てる）。
+    """
+    layers: list[tuple[str, dict]] = [(p.name, p.metamodel()) for p in reversed(packs)]
+    project_mm = {k: v for k, v in project_data.items() if k != "extends"}
+    layers.append(("(プロジェクト)", project_mm))
+
+    reserved: dict[str, str] = {}         # 予約名前空間 名前 -> 予約した層
+    for p in reversed(packs):
+        for n in p.reserved_namespaces():
+            reserved.setdefault(n, p.name)
+
+    eff: dict = {"version": project_mm.get("version", 1),
+                 "item_types": {}, "relation_types": {}, "namespaces": {}}
+    origin = {"item": {}, "attr": {}, "rel": {}, "relattr": {}, "ns": {}}
+    first = True
+    for label, mm in layers:
+        if not first:
+            _check_layer(mm, eff, origin, label, problems)
+        _merge_layer(eff, origin, mm, label, reserved, problems)
+        first = False
+    return eff
+
+
+def _merge_layer(eff, origin, mm, label, reserved, problems) -> None:
+    for tname, tdef in (mm.get("item_types") or {}).items():
+        tdef = tdef or {}
+        base = eff["item_types"].get(tname)
+        if base is None:
+            eff["item_types"][tname] = _copy_type(tdef)
+            origin["item"][tname] = label
+            for aname in (tdef.get("attributes") or {}):
+                origin["attr"][(tname, aname)] = label
+        else:
+            for opt in ("label", "label_field", "id_prefix", "sequence",
+                        "warn_if_unreferenced"):
+                if opt in tdef:
+                    base[opt] = tdef[opt]
+            attrs = base.setdefault("attributes", {})
+            for aname, spec in (tdef.get("attributes") or {}).items():
+                attrs[aname] = {**(attrs.get(aname) or {}), **(spec or {})}
+                origin["attr"][(tname, aname)] = label
+    for rname, rdef in (mm.get("relation_types") or {}).items():
+        rdef = rdef or {}
+        base = eff["relation_types"].get(rname)
+        if base is None:
+            eff["relation_types"][rname] = _copy_type(rdef)
+            origin["rel"][rname] = label
+            for aname in (rdef.get("attributes") or {}):
+                origin["relattr"][(rname, aname)] = label
+        else:
+            for opt in ("from", "to", "cardinality", "ordered", "embedded", "label"):
+                if opt in rdef:
+                    base[opt] = rdef[opt]
+            attrs = base.setdefault("attributes", {})
+            for aname, spec in (rdef.get("attributes") or {}).items():
+                attrs[aname] = {**(attrs.get(aname) or {}), **(spec or {})}
+                origin["relattr"][(rname, aname)] = label
+    _merge_namespaces(eff, mm, label, reserved, problems)
+
+
+def _copy_type(tdef: dict) -> dict:
+    out = {k: v for k, v in tdef.items() if k != "attributes"}
+    out["attributes"] = {a: dict(s or {}) for a, s in (tdef.get("attributes") or {}).items()}
+    return out
+
+
+def _merge_namespaces(eff, mm, label, reserved, problems) -> None:
+    ns = mm.get("namespaces") or {}
+    ns = {n: n for n in ns} if isinstance(ns, list) else dict(ns)
+    for n, disp in ns.items():
+        owner = reserved.get(n)
+        if owner is not None and owner != label:
+            problems.append(Problem("error", f"pack:{label}",
+                                    f"STD-E131 名前空間 '{n}' は {owner} が予約している"
+                                    "（再宣言は不可）"))
+            continue
+        if n in eff["namespaces"] and eff["namespaces"][n] != disp:
+            problems.append(Problem("warn", f"pack:{label}",
+                                    f"STD-E131? 名前空間 '{n}' の表示名が下位層と異なる"))
+        eff["namespaces"][n] = disp
+
+
+def _tag(label, base_label) -> str:
+    return f"[{label} → {base_label}]"
+
+
+def _check_layer(mm, eff, origin, label, problems) -> None:
+    """overlay 層 mm を、下位をマージ済みの eff に対して §6 の緩和禁止で検査する。"""
+    for tname, tdef in (mm.get("item_types") or {}).items():
+        base = eff["item_types"].get(tname)
+        if base is None:
+            continue                      # 新種別の追加は自由
+        tdef = tdef or {}
+        tag = _tag(label, origin["item"].get(tname, "?"))
+        for opt in ("id_prefix", "sequence"):
+            if opt in tdef and opt in base and tdef[opt] != base[opt]:
+                problems.append(Problem("error", f"metamodel:{tname}",
+                                        f"STD-E121 {tag} {opt} の変更は不可"
+                                        "（横断の ID 一貫性を壊す）"))
+        _check_attrs(base.get("attributes") or {}, tdef.get("attributes") or {},
+                     origin["attr"], tname, label, problems, kind="metamodel")
+    for rname, rdef in (mm.get("relation_types") or {}).items():
+        base = eff["relation_types"].get(rname)
+        if base is None:
+            continue                      # 新関係の追加は自由
+        rdef = rdef or {}
+        tag = _tag(label, origin["rel"].get(rname, "?"))
+        for side in ("from", "to"):
+            if side in rdef:                       # endpoint 種別の削除 = 緩和
+                removed = set(_as_list(base.get(side))) - set(_as_list(rdef.get(side)))
+                if removed:
+                    problems.append(Problem("error", f"metamodel:{rname}",
+                                            f"STD-E111 {tag} {side} から種別 "
+                                            f"{sorted(removed)} を削除している（緩和）"))
+            if "cardinality" in rdef and side in (rdef.get("cardinality") or {}):
+                bc = _card((base.get("cardinality") or {}).get(side))
+                oc = _card((rdef.get("cardinality") or {}).get(side))
+                if _card_relaxed(bc, oc):
+                    problems.append(Problem("error", f"metamodel:{rname}",
+                                            f"STD-E112 {tag} {side} の多重度を緩めている"))
+        if "ordered" in rdef and base.get("ordered") and not rdef["ordered"]:
+            problems.append(Problem("error", f"metamodel:{rname}",
+                                    f"STD-E113 {tag} ordered の解除は不可"))
+        if "embedded" in rdef and "embedded" in base and rdef["embedded"] != base["embedded"]:
+            problems.append(Problem("error", f"metamodel:{rname}",
+                                    f"STD-E113 {tag} embedded 宣言の変更は不可"))
+        _check_attrs(base.get("attributes") or {}, rdef.get("attributes") or {},
+                     origin["relattr"], rname, label, problems, kind="metamodel")
+
+
+def _check_attrs(base_attrs, over_attrs, origin_map, owner, label, problems, kind) -> None:
+    for aname, over in over_attrs.items():
+        base = base_attrs.get(aname)
+        if base is None:
+            continue                      # 属性の追加は自由（required でも厳格化）
+        over = over or {}
+        tag = _tag(label, origin_map.get((owner, aname), "?"))
+        where = f"{kind}:{owner}.{aname}"
+        if "kind" in over and "kind" in base and over["kind"] != base["kind"]:
+            problems.append(Problem("error", where, f"STD-E101 {tag} kind の変更は不可"))
+        if base.get("required") and over.get("required") is False:
+            problems.append(Problem("error", where, f"STD-E102 {tag} required の緩和は不可"))
+        if base.get("unique") and over.get("unique") is False:
+            problems.append(Problem("error", where, f"STD-E103 {tag} unique の除去は不可"))
+        if base.get("kind") == "enum" and "values" in over:
+            added = [v for v in (over.get("values") or []) if v not in (base.get("values") or [])]
+            if added and not base.get("extensible"):
+                problems.append(Problem("error", where,
+                                        f"STD-E104 {tag} extensible でない enum に値 "
+                                        f"{added} を追加している"))
+
+
+def _as_list(v):
+    return v if isinstance(v, list) else ([] if v is None else [v])
 
 
 # ---------- テンプレートの多層検索 ----------
@@ -265,3 +485,117 @@ def collect_documents(root: Path, packs: list[Pack],
         if stem not in project_stems and not doc.get("abstract"):
             docs.append((stem, dict(doc)))
     return sorted(docs, key=lambda d: d[0])
+
+
+# ---------- L2 準拠検証（conformance/rules.yaml） ----------
+
+def load_conformance_rules(packs: list[Pack]) -> dict:
+    """チェーン全層の準拠規則をまとめる。
+
+    require_documents / attribute_rules は加法、status_rules は近い層が優先。
+    """
+    require: list = []
+    attr_rules: list = []
+    status_rules: dict = {}
+    for pack in reversed(packs):          # ルート→近い層。status_rules は近い層で上書き
+        f = pack.conformance_file
+        if not f.is_file():
+            continue
+        with open(f, encoding="utf-8") as fh:
+            rules = yaml.safe_load(fh) or {}
+        for d in rules.get("require_documents") or []:
+            if d not in require:
+                require.append(d)
+        attr_rules.extend(rules.get("attribute_rules") or [])
+        status_rules.update(rules.get("status_rules") or {})
+    return {"require_documents": require, "attribute_rules": attr_rules,
+            "status_rules": status_rules}
+
+
+def check_conformance_rules(root: Path, packs: list[Pack], store,
+                            problems: list[Problem], for_baseline: bool = False) -> None:
+    """L2: データ・文書に対する準拠規則を検査する（conform コマンドが呼ぶ）。"""
+    if not packs:
+        return
+    rules = load_conformance_rules(packs)
+
+    generated = {name for name, _ in collect_documents(root, packs, problems)}
+    for name in rules["require_documents"]:
+        if name not in generated:
+            problems.append(Problem("error", f"documents/{name}",
+                                    f"STD-E201 必須の標準文書 '{name}' が実体化されていない"))
+
+    for rule in rules["attribute_rules"]:
+        t, attr = rule.get("type"), rule.get("attribute")
+        when = rule.get("when_status") or []
+        level = rule.get("level", "error")
+        if not t or not attr:
+            continue
+        for item in store.items_of(t):
+            if item.status in when and not item.attrs.get(attr):
+                problems.append(Problem(level, f"{item.type}:{item.id}",
+                                        f"STD-E211 status={item.status} では属性 "
+                                        f"'{attr}' の記載が必須"))
+
+    if for_baseline:
+        need = rules["status_rules"].get("baseline_requires")
+        if need == "approved":
+            for item in store.items.values():
+                if item.status in ("draft", "review"):
+                    problems.append(Problem("error", f"{item.type}:{item.id}",
+                                            f"STD-E221 ベースライン前提: status={item.status} "
+                                            "が残っている（approved が必要）"))
+            for r in store.relations:
+                if r.status in ("draft", "review"):
+                    problems.append(Problem("error", f"relation:{r.type}",
+                                            f"STD-E221 ベースライン前提: 関係 "
+                                            f"{r.src}->{r.dst} の status={r.status}"))
+
+
+# ---------- pack.lock ----------
+
+def _rel(root: Path, d: Path) -> str:
+    try:
+        return d.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return d.resolve().as_posix()
+
+
+def _hash_dir(d: Path) -> str:
+    """パックディレクトリ全ファイルの正規化ハッシュ（パス + 内容）。"""
+    h = hashlib.sha256()
+    for f in sorted(p for p in d.rglob("*") if p.is_file()):
+        if "__pycache__" in f.parts or f.suffix == ".pyc":
+            continue
+        h.update(f.relative_to(d).as_posix().encode("utf-8") + b"\0")
+        h.update(f.read_bytes() + b"\0")
+    return "sha256:" + h.hexdigest()
+
+
+def chain_lock(root: Path, packs: list[Pack]) -> dict:
+    return {"chain": [{"pack": p.name, "resolved_version": p.version,
+                       "content_hash": _hash_dir(p.dir),
+                       "resolved_from": _rel(root, p.dir)} for p in packs]}
+
+
+def write_lock(root: Path, packs: list[Pack]) -> Path:
+    lock = root / "pack.lock"
+    lock.write_text(
+        "# 機械生成。直接編集しない（specdb pack lock で更新する）。\n"
+        + yaml.safe_dump(chain_lock(root, packs), allow_unicode=True, sort_keys=False),
+        encoding="utf-8")
+    return lock
+
+
+def verify_lock(root: Path, packs: list[Pack], problems: list[Problem],
+                frozen: bool = False) -> None:
+    """pack.lock と解決結果を照合する。lock 未作成なら何もしない（lock は明示運用）。"""
+    lock = root / "pack.lock"
+    if not lock.is_file():
+        return
+    with open(lock, encoding="utf-8") as f:
+        locked = yaml.safe_load(f) or {}
+    if locked.get("chain") != chain_lock(root, packs).get("chain"):
+        problems.append(Problem("error" if frozen else "warn", "pack.lock",
+                                "STD-W003 pack.lock と解決結果が一致しない"
+                                "（specdb pack lock で更新）"))

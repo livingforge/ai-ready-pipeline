@@ -87,9 +87,9 @@ def main() -> int:
     out_dir = root / "out"
 
     store = Store.load(root)
-    # 標準パック: 継承チェーンを解決し、テンプレート多層検索と文書カタログに使う。
+    # 標準パックの継承チェーンは Store.load が解決済み（store.packs）。
     # extends が無ければ packs は空で従来動作のまま。
-    packs = standard.resolve_chain(root, store.problems)
+    packs = store.packs
     standard.check_template_overrides(root, packs, store.problems)
     defs = standard.collect_documents(root, packs, store.problems)
     for p in store.problems:

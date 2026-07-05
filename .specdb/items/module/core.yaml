@@ -42,7 +42,7 @@
   name: specdb エンジン
   path: specdb/
   description: >-
-    メタモデル駆動の汎用エンジン。ローダ/バリデータ/クエリ API (engine.py)・文書ジェネレータ (generate.py)・標準パック解決 (standard.py)・ベースライン差分 (diff.py)・変更履歴 (history.py)・対話型グラフビューア (visualize.py)・同期チェック (sync_check.py)・変更操作 CLI (mutate.py) から成る。特定のアイテム種別を知らない。ビルドで .claude/skills/specdb/scripts/ へ展開される。
+    メタモデル駆動の汎用エンジン。ローダ/バリデータ/クエリ API (engine.py)・文書ジェネレータ (generate.py)・標準パック解決/マージ/準拠検証 (standard.py)・準拠検証コマンド (conform.py)・パック補助操作 (pack.py)・ベースライン差分 (diff.py)・変更履歴 (history.py)・対話型グラフビューア (visualize.py)・同期チェック (sync_check.py)・変更操作 CLI (mutate.py) から成る。特定のアイテム種別を知らない。ビルドで .claude/skills/specdb/scripts/ へ展開される。
   status: review
   rules: [dr-03, dr-04, dr-06]
   depends:

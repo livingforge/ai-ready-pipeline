@@ -171,15 +171,27 @@ class Store:
         self.items: dict[str, Item] = {}
         self.relations: list[Relation] = []
         self.problems: list[Problem] = []
+        self.packs: list = []            # 標準パックの継承チェーン（extends 使用時のみ）
 
     # ---------- 読み込み ----------
 
     @staticmethod
     def load(root: Path = ROOT) -> "Store":
         problems: list[Problem] = []
-        mm = Metamodel.load(root / "metamodel.yaml", problems)
+        mm_file = root / "metamodel.yaml"
+        with open(mm_file, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        # 標準パック: extends があればチェーンを解決し、実効メタモデル（マージ済み）
+        # を作る。engine 自体はパックを知らず、standard が返す dict を受けるだけ。
+        packs: list = []
+        if data.get("extends"):
+            import standard
+            packs = standard.resolve_chain(root, problems)
+            data = standard.merge_and_check(root, data, packs, problems)
+        mm = Metamodel(data, problems)
         store = Store(mm)
         store.problems = problems
+        store.packs = packs
         store._load_items(root / "items")
         store._load_relations(root / "relations")
         store._validate_relations()
