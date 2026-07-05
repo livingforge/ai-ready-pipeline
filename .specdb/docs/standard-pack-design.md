@@ -493,22 +493,35 @@ dist 生成テンプレートの整備で、これは最初のパックを作る
 各 Phase 完了時に既存プロジェクト（この repo の `.specdb`）を最初の準拠
 プロジェクトとして移行し、ドッグフーディングする。
 
-#### Phase 3 での設計判断: パックの specdb 自己正本化は Phase 3.5 に分離
+#### Phase 3.5（完了）: パックの specdb 自己正本化
 
-§3.1 の「パックを specdb で正本化（.specdb → dist を generate）」は、初回の
-実パックでは**採らず、配布物を直接オーサリングした**。理由は実装中に判明した
-generate.py の具体的制約:
+Phase 3 で保留していた §3.1 のパック自己正本化を実装した。摩擦だった点は
+次の小改修で解消:
 
-- generate は文書定義 1 件につき出力 1 ファイル。dist の `documents/*.yaml`
-  （複数）を生成するには doc-type 1 件ごとに薄い生成定義が要り冗長
-- 出力先が `out/` 固定で、`pack.yaml` や `metamodel/core.yaml` を含む dist
-  ツリー全体の組み立てには別のアセンブラ工程が必要
+- **generate `foreach`**: 文書定義に `foreach: <種別>` を書くと、その種別の
+  アイテム 1 件ごとに 1 ファイルを出力する（`output` は `{属性}` 展開、
+  テンプレートに `item` が渡る）。dist の `documents/*.yaml` を doc-type
+  アイテムから 1 対 1 で生成できる
+- **engine の `kind: list` / `kind: map`**: パックの文書カタログ・準拠規則は
+  list/map 値の設定（`params.required`・`doc_no.pattern`・`when_status` 等）を
+  持つ。これらを正本アイテムの属性として持てるよう浅い型検査の list/map を
+  追加した（README の既知の限界だった「構造化された値」への一歩でもある）
+- **`specdb pack build <正本dir> --into <配布dir>`**: 正本 specdb を generate
+  して `documents/*.yaml` と `conformance/rules.yaml` を配布パックへ配置する
 
-この摩擦の解消（generate の複数出力・出力先指定・アセンブラ）は独立した
-小改修で、**消費側の契約（§4〜§7）を一切変えない**ため、実パックを先に
-出して機構を実データで固めてから Phase 3.5 として被せる方が安全と判断した。
-決定事項 3（specdb 正本化）は撤回ではなく Phase 3.5 へ繰り延べである。
-（generate に nested 出力の mkdir 対応は先行して入れた。）
+正本は `specdb/packs-src/jp-sier-std/`（doc-type / conformance-rule /
+style-part アイテム + renders 関係。extends なしのスタンドアロン）。配布物の
+`documents/*.yaml` と `conformance/rules.yaml` は**そこから生成されたビュー**
+（機械生成ヘッダ付き）になった。`pack.yaml`・`metamodel/core.yaml`・
+`templates/*.j2` は §3.1 どおり配布物側で直接オーサリングし、テンプレートは
+style-part として台帳化する（実体二重管理をしない）。
+
+回帰テスト test_pack_selfhost.py が `pack build` の出力と配布物の data-equal
+（no-drift）を固定する。決定事項 3（specdb 正本化）はこれで実装済みとなった。
+
+補足（リポジトリ規約）: 正本 `packs-src/` は他の src（specdb/*.py 等）と同じく
+Git 追跡外で、ビルド成果物側（.claude / .github の配布パック）が追跡される。
+パック正本自体を版管理したい場合は追跡対象への移設が別途必要（未対応）。
 
 ## 11. レビュー決定事項（2026-07-05 — 全論点決着済み）
 

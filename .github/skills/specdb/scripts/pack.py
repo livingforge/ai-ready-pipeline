@@ -3,6 +3,7 @@
 
     python specdb/pack.py lock                 # pack.lock を解決結果から生成/更新
     python specdb/pack.py check <パックdir>      # パックのリリースチェック（block 規約等）
+    python specdb/pack.py build <正本dir> --into <配布dir>  # 正本 specdb から配布物を生成
 
 pack.lock は継承チェーンの解決結果（版・内容ハッシュ）を固定する。CI は
 `specdb conform --frozen` で lock と実際の解決結果の一致を機械的に検査できる。
@@ -80,11 +81,46 @@ def _cmd_check(pack_dir: Path) -> int:
     return 1 if any(p.level == "error" for p in problems) else 0
 
 
+def _cmd_build(authoring: Path, into: Path) -> int:
+    """パック正本 specdb（authoring）から配布物 documents/ + conformance/ を生成し
+    into（配布パックdir）へ配置する。§3.1 のパック自己正本化。"""
+    import shutil
+    import generate
+    if not (authoring / "metamodel.yaml").is_file():
+        print(f"{authoring} はパック正本 specdb ではない。", file=sys.stderr)
+        return 2
+    rc = generate.main(["--root", str(authoring)])
+    if rc:
+        return rc
+    out = authoring / "out"
+    copied = 0
+    docs_out = out / "documents"
+    if docs_out.is_dir():
+        (into / "documents").mkdir(parents=True, exist_ok=True)
+        for f in sorted(docs_out.glob("*.yaml")):
+            shutil.copyfile(f, into / "documents" / f.name)
+            copied += 1
+    rules = out / "conformance" / "rules.yaml"
+    if rules.is_file():
+        (into / "conformance").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(rules, into / "conformance" / "rules.yaml")
+        copied += 1
+    print(f"配布物を更新した: {into}（{copied} ファイル）")
+    return 0
+
+
 def main() -> int:
     root, args = parse_root(sys.argv[1:])
     action = args[0] if args else None
     if action == "lock":
         return _cmd_lock(root)
+    if action == "build":
+        if "--into" not in args:
+            print("使い方: specdb pack build <正本dir> --into <配布dir>", file=sys.stderr)
+            return 2
+        authoring = Path(args[1]) if len(args) > 1 and not args[1].startswith("-") else root
+        into = Path(args[args.index("--into") + 1])
+        return _cmd_build(authoring, into)
     if action == "check":
         # check の対象パックは引数指定（無ければ解決チェーンの直近パック）
         if len(args) >= 2:

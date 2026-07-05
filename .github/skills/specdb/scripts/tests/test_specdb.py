@@ -85,6 +85,33 @@ def test_cardinality_skips_deprecated():
     assert not s.problems, [str(p) for p in s.problems]
 
 
+LISTMAP_MM = """
+version: 1
+item_types:
+  doc-type:
+    label: 文書種別
+    label_field: name
+    attributes:
+      name:   { kind: string, required: true }
+      params: { kind: list }
+      doc_no: { kind: map }
+"""
+
+
+def test_list_and_map_kinds_accept_nested_values():
+    s = build({"metamodel": LISTMAP_MM, "items/doc-type/d.yaml":
+               "- { id: dt1, name: 基本設計, params: [a, b], doc_no: { prefix: SD } }\n"})
+    assert not s.problems, [str(p) for p in s.problems]
+    assert s.items["dt1"].attrs["params"] == ["a", "b"]
+    assert s.items["dt1"].attrs["doc_no"] == {"prefix": "SD"}
+
+
+def test_list_kind_rejects_scalar():
+    s = build({"metamodel": LISTMAP_MM,
+               "items/doc-type/d.yaml": "- { id: dt1, name: x, params: notalist }\n"})
+    assert_problem(s, "'params' は list であるべき")
+
+
 def test_item_attribute_unique():
     s = build({
         "items/entity/e.yaml": ITEMS_OK + """

@@ -1,7 +1,4 @@
-# テーブル定義書 — 全エンティティの列定義を列挙する台帳（非 abstract）
-#
-# システム固有パラメータを持たない全件カタログなので、消費側の穴埋め不要で
-# 自動生成される。消費側は同名ファイルを置けば上書きできる。
+# 機械生成（specdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
 title: テーブル定義書
 output: テーブル定義書.md
 template: table-spec.md.j2

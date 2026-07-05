@@ -1,11 +1,8 @@
-# システム基本設計書（Excel 風 HTML）— 標準文書の雛形（abstract）
-#
-# 消費側は documents/basic-design.yaml に `from_standard: basic-design` を書き、
-# system_name / doc_no / version / preface を穴埋めして実体化する。
+# 機械生成（specdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
 abstract: true
 title: システム基本設計書（{system_name}）
 output: 基本設計書_{system_name}.html
 template: basic-design.html.j2
-doc_no: { pattern: 'SD-[A-Z]{2,4}-\d{3}' }
+doc_no: {"pattern": "SD-[A-Z]{2,4}-\\d{3}"}
 params:
-  required: [system_name, doc_no, version, preface.purpose, preface.scope]
+  required: ["system_name", "doc_no", "version", "preface.purpose", "preface.scope"]

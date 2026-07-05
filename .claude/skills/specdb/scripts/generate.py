@@ -81,8 +81,19 @@ def make_env(store: Store, template_dirs: Path | list[Path],
     return env
 
 
-def main() -> int:
-    root, args = parse_root(sys.argv[1:])
+def _expand_foreach(doc: dict, store: Store):
+    """文書定義を出力単位に展開する。foreach が無ければ単一 (output, None)。"""
+    if "foreach" not in doc:
+        return [(doc["output"], None)]
+    targets = []
+    for it in store.items_of(doc["foreach"]):
+        ctx = {**it.attrs, "id": it.id}
+        targets.append((doc["output"].format(**ctx), it))
+    return targets
+
+
+def main(argv: list[str] | None = None) -> int:
+    root, args = parse_root(sys.argv[1:] if argv is None else argv)
     only = args[0] if args else None
     out_dir = root / "out"
 
@@ -120,14 +131,21 @@ def main() -> int:
         data_history = []
     out_dir.mkdir(exist_ok=True)
 
+    n_out = 0
     for _name, doc in defs:
-        text = env.get_template(doc["template"]).render(
-            doc=doc, store=store, mm=store.mm,
-            generated_at=generated_at, data_rev=rev, data_history=data_history)
-        dest = out_dir / doc["output"]
-        dest.parent.mkdir(parents=True, exist_ok=True)   # output に副ディレクトリを含めても可
-        dest.write_text(text, encoding="utf-8")
-        print(f"生成しました: {dest}")
+        template = env.get_template(doc["template"])
+        # foreach: <種別> を宣言した文書定義は、その種別のアイテム 1 件ごとに
+        # 1 ファイルを出力する。output は "{属性}" を含められ、item 属性 + id で
+        # 展開される。テンプレートには item が追加で渡る。
+        for out_rel, item in _expand_foreach(doc, store):
+            text = template.render(
+                doc=doc, item=item, store=store, mm=store.mm,
+                generated_at=generated_at, data_rev=rev, data_history=data_history)
+            dest = out_dir / out_rel
+            dest.parent.mkdir(parents=True, exist_ok=True)   # 副ディレクトリ出力に対応
+            dest.write_text(text, encoding="utf-8")
+            print(f"生成しました: {dest}")
+            n_out += 1
 
     warns = sum(1 for p in store.problems if p.level == "warn")
     print(f"  アイテム {len(store.items)} 件 / 関係 {len(store.relations)} 件 / "

@@ -35,6 +35,10 @@ _KIND_CHECKS = {
     "string": lambda v: isinstance(v, str),
     "int":    lambda v: isinstance(v, int) and not isinstance(v, bool),
     "bool":   lambda v: isinstance(v, bool),
+    # list / map は入れ子構造をそのまま持つ（浅い型検査のみ）。パックの
+    # 文書カタログ・準拠規則のような list/map 値の設定を正本化できるようにする。
+    "list":   lambda v: isinstance(v, list),
+    "map":    lambda v: isinstance(v, dict),
 }
 
 

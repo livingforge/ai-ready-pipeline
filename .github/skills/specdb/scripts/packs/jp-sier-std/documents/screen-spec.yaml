@@ -1,4 +1,4 @@
-# 画面仕様書 — 全画面の表示項目を列挙する台帳（非 abstract）
+# 機械生成（specdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
 title: 画面仕様書
 output: 画面仕様書.md
 template: screen-spec.md.j2
