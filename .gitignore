@@ -12,4 +12,6 @@
 # 許可フォルダ内でも、これらは公開しない
 __pycache__/
 *.pyc
+build/
+*.egg-info/
 /.specdb/out/
