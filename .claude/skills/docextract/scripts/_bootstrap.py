@@ -347,7 +347,7 @@ def _ensure_launcher(uv: str, venv: Path, venv_python: Path,
     if have == want:
         return
     _gate(
-        "スキル起動コマンド (specdb / docextract) を共有仮想環境へインストール",
+        "スキル起動コマンド (specdb / docextract / docsummary) を共有仮想環境へインストール",
         [f"uv pip install --python {venv_python} {launcher_dir}"],
         note="同梱のローカルパッケージのみ (大きな依存のダウンロードはありません)。",
     )

@@ -7,3 +7,4 @@
 - { type: uses, from: ag-designer, to: sk-specdb,    status: approved }
 - { type: uses, from: ag-designer, to: mod-docagent, status: approved }
 - { type: uses, from: ag-skill-setup, to: sk-docextract, status: approved }
+- { type: uses, from: ag-skill-setup, to: sk-docsummary, status: review }

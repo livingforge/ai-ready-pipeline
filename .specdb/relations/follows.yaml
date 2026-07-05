@@ -1,0 +1,5 @@
+- { type: follows, from: sk-docsummary, to: dr-02, status: review }
+- { type: follows, from: sk-docsummary, to: dr-04, status: review }
+- { type: follows, from: sk-docsummary, to: dr-05, status: review }
+- { type: follows, from: mod-docsummary, to: dr-02, status: review }
+- { type: follows, from: mod-docsummary, to: dr-04, status: review }

@@ -66,3 +66,14 @@
     doc: README.md
     location: { section: "スキルとしての配布" }
     evidence: "単一のソース src/skills/ (スキル) + src/agents/ (エージェント) + 本体パッケージ docextract/ から、ビルドスクリプトが .claude/ と .github/ の両方へ同一内容を出力する"
+
+- id: mod-docsummary
+  name: docsummary パッケージ
+  path: docsummary/
+  description: >-
+    登録済み文書の LLM 要約パッケージ。設定解決（settings: .env 読み込み・プロバイダ選択・秘密の非開示）、プロバイダ HTTP 層（providers: urllib のみで openai / azure / gemini / anthropic を呼ぶ）、要約ストアと対象選択（store）、CLI（cli: run / list / show / config）から成り、要約フォーマットの既定（templates/summary_format.md）を同梱する。
+  status: review
+  source:
+    doc: docsummary/__init__.py
+    location: {section: docstring}
+    evidence: docsummary — 登録済み文書を LLM で要約するスキルの本体パッケージ。

@@ -18,9 +18,10 @@ HERE = Path(__file__).resolve().parent
 COMMANDS: dict[str, tuple[str, str]] = {
     "extract": ("run_docextract.py", "Office/PDF を構造化 JSON へ抽出"),
     "docagent": ("run_docagent.py", "集約 JSON のデータ操作 (init/sync/search/facts …)"),
+    "summarize": ("run_docsummary.py", "登録済み文書を LLM で要約 (要 API キー設定)"),
     "setup": ("setup_env.py", "スキル実行環境の構築 (venv・依存・venv コマンド)"),
 }
-ALIASES = {"agent": "docagent"}
+ALIASES = {"agent": "docagent", "docsummary": "summarize"}
 
 
 def _usage(stream) -> None:

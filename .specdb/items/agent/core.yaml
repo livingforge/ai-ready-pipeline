@@ -65,10 +65,10 @@
   name: skill-setup
   phase: 環境構築
   description: >-
-    docextract / specdb スキルを動かす共有環境を構築・検証するセットアップエージェント。共有 venv（uv）・両スキルの依存・venv コマンド（specdb / docextract）を setup コマンド経由で用意し、他のエージェント・スキルの利用前に必ず実行される。構築は冪等で、外部取得・インストールなどの高リスク操作は利用者の承認を得てから行う（fail-closed）。
+    docextract / specdb / docsummary スキルを動かす共有環境を構築・検証するセットアップエージェント。共有 venv（uv）・スキルの依存・venv コマンド（specdb / docextract / docsummary）を setup コマンド経由で用意し、他のエージェント・スキルの利用前に必ず実行される。要約用 LLM の接続設定（.env）もサポートするが、API キーの値は読まず・表示せず、確認は docsummary config --check の出力だけで行う。構築は冪等で、外部取得・インストールなどの高リスク操作は利用者の承認を得てから行う（fail-closed）。
   output_policy: 状態確認（setup --check）の結果と、使えるようになったコマンドの報告のみ
-  status: approved
+  status: review
   source:
     doc: src/agents/skill-setup/body.md
     location: {section: 冒頭}
-    evidence: あなたはスキル実行環境のセットアップ担当。docextract / specdb スキルを動かす
+    evidence: あなたはスキル実行環境のセットアップ担当。docextract / specdb / docsummary

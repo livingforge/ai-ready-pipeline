@@ -43,3 +43,7 @@
 - { type: realizes, from: sk-docextract, to: fn-env-setup, status: approved }
 - { type: realizes, from: sk-specdb, to: fn-list, status: approved }
 - { type: realizes, from: mod-specdb, to: fn-list, status: approved }
+- { type: realizes, from: sk-docsummary, to: fn-summarize, status: review }
+- { type: realizes, from: mod-docsummary, to: fn-summarize, status: review }
+- { type: realizes, from: sk-docsummary, to: fn-llm-config, status: review }
+- { type: realizes, from: ag-skill-setup, to: fn-llm-config, status: review }

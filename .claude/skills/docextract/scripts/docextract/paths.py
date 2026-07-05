@@ -14,6 +14,10 @@ docextract の抽出結果 (``output/``) と docagent の集約ストア (``stor
         doctypes.json    <- 文書種別の定義 (利用者が編集できる)
         facts.json       <- 抽出ファクト (仕様・要件項目、出典付き)
         item_types.json  <- ファクト種別の定義 (利用者が編集できる)
+        summaries.json          <- docsummary の要約メタデータ (docsummary/store.py が解決)
+        summary_guide.md        <- 要約の観点ガイドの上書き (任意。既定は docsummary 同梱)
+        summary_categories.json <- 要約カテゴリー定義の上書き (任意。既定は docsummary 同梱)
+      summaries/         <- docsummary の要約 Markdown (<doc_id>.md)
 
 配置換えは環境変数 ``DOCEXTRACT_HOME`` で行う (docextract / docagent 共通の
 唯一のつまみ)。個別の上書きは docextract の ``--output-dir`` /

@@ -74,5 +74,8 @@
   name: pytest
   usage: 同梱テストの実行（自己検証・テスト依存。requirements.txt に統合し配布物へ同梱、requirements.lock でハッシュ固定）
   license: MIT
-  status: approved
-  source: { doc: dependencies.md, location: { section: "テスト依存 (pip) — 配布物に同梱" }, evidence: "pytest 同梱テストの実行 (自己検証) MIT" }
+  status: review
+  source:
+    doc: src/skills/packs/docextract/dependencies.md
+    location: {section: テスト依存 (pip) — 配布物に同梱}
+    evidence: pytest | 同梱テストの実行 (自己検証) | MIT

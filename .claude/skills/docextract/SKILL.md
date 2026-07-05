@@ -74,7 +74,9 @@ docextract extract --dir <folder> -r -o <output-dir>  # recurse
   See [docs/usage.md](docs/usage.md#llm--エージェントに渡すとき--標準出力をレシートにする).
 
 Work with extracted results through the same launcher:
-`docextract docagent <subcommand>`.
+`docextract docagent <subcommand>`. Summarize registered documents with an LLM
+via `docsummary <subcommand>` (alias: `docextract summarize`) — see the
+**docsummary** skill for target selection and API-key (.env) setup.
 
 Python API:
 

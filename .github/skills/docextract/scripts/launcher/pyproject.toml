@@ -7,13 +7,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skill-launcher"
-version = "1.0.0"
-description = "スキル CLI を任意のディレクトリから起動する console script (specdb / docextract)"
+version = "1.1.0"
+description = "スキル CLI を任意のディレクトリから起動する console script (specdb / docextract / docsummary)"
 requires-python = ">=3.10"
 
 [project.scripts]
 specdb = "skill_launcher:main_specdb"
 docextract = "skill_launcher:main_docextract"
+docsummary = "skill_launcher:main_docsummary"
 
 [tool.setuptools]
 py-modules = ["skill_launcher"]

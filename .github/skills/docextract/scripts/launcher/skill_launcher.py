@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""venv コマンド `specdb` / `docextract` の実体 — cwd から上方探索して委譲する
+"""venv コマンド `specdb` / `docextract` / `docsummary` の実体 — cwd から上方探索して委譲する
 
 共有 venv に console script として install され（_bootstrap.py が担当）、
 venv が有効なら任意のディレクトリで
@@ -130,3 +130,9 @@ def main_specdb() -> int:
 
 def main_docextract() -> int:
     return main("docextract", sys.argv[1:])
+
+
+def main_docsummary() -> int:
+    """venv コマンド `docsummary`。実体は docextract スキルの summarize
+    サブコマンド (docsummary パッケージは docextract スキルに同梱される)。"""
+    return main("docextract", ["summarize", *sys.argv[1:]])

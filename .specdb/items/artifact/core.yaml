@@ -103,3 +103,39 @@
     doc: .specdb/sync.yaml
     location: {section: 冒頭}
     evidence: 同期チェック (sync_check.py) の設定 — 実装と正本の突合規則
+
+- id: ar-summary
+  name: 要約文書
+  path: .docextract/summaries/<doc_id>.md
+  format: Markdown
+  description: >-
+    文書 1 件ごとの要約。ツールが固定するメタ情報ヘッダ（doc_id・プロバイダ/モデル・生成日時・本文切り詰めの有無）とメタ表（文書種別・付与カテゴリー・ファイル形式）に続き、要約の観点に沿った LLM 出力の本文を収める固定構造。出力フォーマットの定義は持たず、可変なのは本文とカテゴリーのみ。
+  status: review
+  source:
+    doc: docsummary/store.py
+    location: {section: docstring}
+    evidence: 要約本文は ``<home>/summaries/<doc_id>.md`` (人が読む Markdown)
+
+- id: ar-summary-index
+  name: 要約索引
+  path: .docextract/store/summaries.json
+  format: JSON
+  description: >-
+    要約のメタデータ集約。文書ごとに付与カテゴリー・内容ハッシュ・要約仕様ハッシュ（観点＋カテゴリー）・プロバイダ/モデル・保存先・日時を持ち、未要約（none）/ 陳腐化（stale）/ 最新（fresh）の鮮度判定に使う。
+  status: review
+  source:
+    doc: docsummary/store.py
+    location: {section: docstring}
+    evidence: メタデータ (どの文書を・どの内容ハッシュで・どのモデルが要約したか) は
+
+- id: ar-summary-spec
+  name: 要約観点・カテゴリー定義
+  path: .docextract/store/summary_guide.md ・ summary_categories.json
+  format: Markdown / JSON
+  description: >-
+    要約の内容を規定する利用者編集可能な定義。summary_guide.md は「どの観点で内容を拾うか」、summary_categories.json は「どの既定カテゴリーへ分類するか」の統制語彙を持つ。いずれもパッケージ同梱の既定があり、store/ に置けば上書きできる（doctypes と同じ同梱既定＋利用者編集優先）。出力フォーマットは定義しない（構造はツールが固定）。
+  status: review
+  source:
+    doc: docsummary/store.py
+    location: {section: docstring}
+    evidence: '利用者が定義するのは**出力フォーマットではなく**次の 2 つ:'

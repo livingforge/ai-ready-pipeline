@@ -53,3 +53,8 @@
   note: "実装差分を写像して正本を更新する（新規・変更は status: review で登録）"
   status: approved
 - { type: consumes, from: mod-specdb, to: ar-sync-config, status: approved }
+- { type: consumes, from: sk-docsummary, to: ar-library, note: 要約対象の選択（文書 ID・元ファイルパス・内容ハッシュ）に使う, status: review }
+- { type: consumes, from: sk-docsummary, to: ar-result, note: 本文の軽量テキストビュー（extract_text）を LLM への入力にする, status: review }
+- { type: produces, from: sk-docsummary, to: ar-summary, status: review }
+- { type: produces, from: sk-docsummary, to: ar-summary-index, status: review }
+- { type: consumes, from: sk-docsummary, to: ar-summary-spec, note: 要約の観点とカテゴリー統制語彙を LLM プロンプトと正規化に使う, status: review }

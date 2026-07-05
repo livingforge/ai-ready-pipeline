@@ -9,7 +9,7 @@
   1. 共有 venv（<プロジェクトルート>/.venv。uv で作成）
   2. docextract の依存（requirements.lock があればハッシュ固定で優先）
   3. specdb の依存（隣接スキル specdb の requirements.txt。PyYAML + Jinja2）
-  4. venv コマンド specdb / docextract（探索係 launcher/ の install）
+  4. venv コマンド specdb / docextract / docsummary（探索係 launcher/ の install）
 
 @skill-setup エージェントがこのコマンドを駆動する（スキル利用前に必ず実行
 される前提）。冪等: 構築済みの項目は marker により素通りする。外部取得・
@@ -64,7 +64,7 @@ def check() -> int:
 
     status(f"共有 venv ({venv})", venv_python.exists(),
            "" if venv_python.exists() else "未作成")
-    for name in ("specdb", "docextract"):
+    for name in ("specdb", "docextract", "docsummary"):
         cmd = _command(venv, name)
         status(f"venv コマンド {name}", cmd.is_file(),
                "" if cmd.is_file() else "未インストール")
@@ -84,6 +84,13 @@ def check() -> int:
             print("[OK] docextract 依存 (marker 記録あり)")
         else:
             print("[--] docextract 依存 (marker 未記録。setup 実行で確認・導入する)")
+    # LLM 接続設定 (docsummary 用) は必須ではないため OK/NG に含めず情報として出す。
+    # 設定の中身 (API キー) はここでは一切読まない — 確認は docsummary config --check。
+    root, _, _ = _paths()
+    env_file = root / ".env"
+    print(f"[--] LLM 接続設定 (.env): {'あり' if env_file.is_file() else '未作成'}"
+          " — 要約 (docsummary) を使う場合のみ必要。"
+          "状態確認: docsummary config --check / 雛形作成: docsummary config --init")
     print("状態:", "構築済み" if ok else "未構築の項目あり（setup で構築する）")
     return 0 if ok else 1
 

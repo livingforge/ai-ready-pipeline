@@ -248,21 +248,22 @@
   func_id: F-19
   name: 統一エントリポイント（スキル CLI）
   description: >-
-    スキルのスクリプト操作を venv コマンド specdb / docextract に統一する。共有 venv へは探索係パッケージ skill-launcher（scripts/launcher/、_bootstrap.py が install）が console script を登録し、任意のディレクトリから <スキル名> <サブコマンド> [オプション] で起動できる。コマンドは cwd から上方探索して展開済みスキル（スキル直下の転送ファイルと scripts/__main__.py のディスパッチャ。build_skill.py が生成）へ委譲するだけで、スキル本体は install しないため zip 再展開の更新に追従する。specdb は --root 未指定時にプロジェクトの .specdb を自動補完し、__init__.py を持つ同名の通常 Python パッケージは誤解決しない。venv 準備前のフォールバックとして python <スキルディレクトリ> <サブコマンド> と従来の python <ディレクトリ>/scripts/<ツール>.py も使える。
+    スキルのスクリプト操作を venv コマンド specdb / docextract / docsummary に統一する。共有 venv へは探索係パッケージ skill-launcher（scripts/launcher/、_bootstrap.py が install）が console script を登録し、任意のディレクトリから <スキル名> <サブコマンド> [オプション] で起動できる。コマンドは cwd から上方探索して展開済みスキル（スキル直下の転送ファイルと scripts/__main__.py のディスパッチャ。build_skill.py が生成）へ委譲するだけで、スキル本体は install しないため zip 再展開の更新に追従する。specdb は --root 未指定時にプロジェクトの .specdb を自動補完し、docsummary は docextract スキルの summarize サブコマンドへ委譲される。__init__.py を持つ同名の通常 Python パッケージは誤解決しない。venv 準備前のフォールバックとして python <スキルディレクトリ> <サブコマンド> と従来の python <ディレクトリ>/scripts/<ツール>.py も使える。
   category: 配布
-  status: approved
+  status: review
   source:
     doc: src/skills/docextract/scripts/launcher/skill_launcher.py
     location: {section: docstring}
-    evidence: venv コマンド `specdb` / `docextract` の実体 — cwd から上方探索して委譲する
+    evidence: >-
+      venv コマンド `specdb` / `docextract` / `docsummary` の実体 — cwd から上方探索して委譲する
 
 - id: fn-env-setup
   func_id: F-20
   name: 実行環境の構築（セットアップ）
   description: >-
-    スキル実行に必要な共有環境を一括構築する。共有 venv の作成（uv。必要なら Python 本体も調達）、docextract / specdb 両スキルの依存インストール（requirements.lock 優先・marker による冪等化）、venv コマンド specdb / docextract の install を setup サブコマンド（setup_env.py）が行い、--check は無変更・承認不要の状態確認を提供する。高リスク操作は _bootstrap の承認ゲート（opt-in・fail-closed）を必ず通る。従来どおり extract / docagent の初回実行でも同じ bootstrap が走る（フォールバック）。
+    スキル実行に必要な共有環境を一括構築する。共有 venv の作成（uv。必要なら Python 本体も調達）、docextract / specdb 両スキルの依存インストール（requirements.lock 優先・marker による冪等化）、venv コマンド specdb / docextract / docsummary の install を setup サブコマンド（setup_env.py）が行い、--check は無変更・承認不要の状態確認を提供する（LLM 接続設定 .env の有無も情報として表示するが、値は読まない）。高リスク操作は _bootstrap の承認ゲート（opt-in・fail-closed）を必ず通る。従来どおり extract / docagent の初回実行でも同じ bootstrap が走る（フォールバック）。
   category: 配布
-  status: approved
+  status: review
   source:
     doc: src/skills/docextract/scripts/setup_env.py
     location: {section: docstring}
@@ -279,3 +280,27 @@
     doc: specdb/list.py
     location: {section: docstring}
     evidence: 一覧 — アイテム/関係を status などで絞って列挙する（読み取り専用）
+
+- id: fn-summarize
+  func_id: F-22
+  name: 文書要約（LLM）
+  description: >-
+    登録済み文書（library.json）を LLM で要約する。対象は文書 ID・元ファイルのフォルダ（--dir）・未要約/陳腐化のみ（--pending）・全登録文書（--all）で選択でき、既定では内容ハッシュと要約仕様ハッシュ（観点＋カテゴリー）による鮮度判定で fresh をスキップする（--force で再要約）。出力構造はツールが固定し（メタ表＋カテゴリー行＋本文）、可変なのは観点に沿った本文と、統制語彙から付与するカテゴリー（LLM が 1 つ選び docextract の doctype と同じ仕組みで正規化。語彙外・欠落は未分類）だけ。本文は result.json の軽量テキストビューを上限文字数まで渡す（超過分は要約に明記させる）。結果は summaries/<doc_id>.md と要約索引（summaries.json、category を含む）へ 1 件ごとに保存し、途中失敗でも完了分を失わない。--dry-run は API キー不要で対象一覧のみ返し、429/5xx は 1 回だけ自動再試行する。
+  category: 資料活用
+  status: review
+  source:
+    doc: docsummary/cli.py
+    location: {section: docstring}
+    evidence: 'run     文書を LLM で要約する (対象: ID / --dir / --pending / --all)'
+
+- id: fn-llm-config
+  func_id: F-23
+  name: LLM 接続設定（.env 管理）
+  description: >-
+    要約に使う LLM の接続情報（API キー・エンドポイント・モデル）を .env（既定。cwd から上方探索）または環境変数で管理する。config --check は各プロバイダの必須変数の設定有無と由来（環境変数 / .env）だけを表示してキーの値は一切出力せず、config --init は空プレースホルダのみの .env / .env.example 雛形を作成する。プロバイダは --provider > 環境変数 DOCSUMMARY_PROVIDER > 「設定済みがちょうど 1 つならそれ」の順で決まり、決められないときは次の一手つきで拒否する。エージェントは .env を直接読まず、この確認コマンドの結果だけで状態を判断する。
+  category: 配布
+  status: review
+  source:
+    doc: docsummary/settings.py
+    location: {section: docstring}
+    evidence: 秘密情報 (API キー等) は **環境変数または `.env` ファイル**で受け取る。
