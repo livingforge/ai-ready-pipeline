@@ -21,12 +21,14 @@ sys.path.insert(0, str(_scripts))  # docsummary パッケージ + _bootstrap
 from _bootstrap import _project_root, ensure_env  # noqa: E402
 
 
-def _resolve_siblings(script: Path) -> None:
-    """依存する docextract / docagent パッケージのある場所を解決し sys.path に載せる。
+def _resolve_siblings(script: Path) -> Path:
+    """依存する docextract / docagent のある場所を解決し sys.path に載せて返す。
 
     開発リポジトリではトップレベル（<root>/docextract, <root>/docagent）、配布物では
     docextract スキルの scripts 配下に両パッケージが同梱される。両方を含む最初の
-    ディレクトリを採用する。見つからなければ docextract スキル未展開なので停止する。
+    ディレクトリを採用し、その場所（base）を返す。docsummary は自前の requirements を
+    持たず、この base の requirements(.lock) を共用する（依存集合は docextract と一致）。
+    見つからなければ docextract スキル未展開なので停止する。
     """
     root = _project_root(script)
     candidates = [
@@ -38,7 +40,7 @@ def _resolve_siblings(script: Path) -> None:
         if (base / "docextract" / "__init__.py").is_file() and \
                 (base / "docagent" / "__init__.py").is_file():
             sys.path.insert(0, str(base))
-            return
+            return base
     raise SystemExit(
         "docsummary: 依存する docextract / docagent パッケージが見つからない。"
         "docsummary は docextract スキルの実行体を参照するため、同じ"
@@ -46,9 +48,10 @@ def _resolve_siblings(script: Path) -> None:
     )
 
 
-_resolve_siblings(Path(__file__))
-# 依存インストールのマーカー・requirements は docextract と共用する。
-ensure_env(Path(__file__), _scripts / "requirements.txt", skill="docextract")
+_dx = _resolve_siblings(Path(__file__))
+# requirements・依存インストールのマーカーは兄弟 docextract スキルと共用する
+# （docsummary の依存集合は docextract のフル依存に一致するため自前に持たない）。
+ensure_env(Path(__file__), _dx / "requirements.txt", skill="docextract")
 
 from docsummary.cli import main  # noqa: E402
 

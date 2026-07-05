@@ -77,7 +77,7 @@
   rule_id: DR-07
   name: スキル単位の実行体同梱と兄弟スキル参照
   statement: >-
-    配布スキルは自身の実行体（本体パッケージ・起動スクリプト）を自前の scripts に同梱し、複数スキルが共有する起動基盤（_bootstrap 等）は単一ソースからビルド時に各スキルへ展開する。あるスキルが他スキルのパッケージへ実行時依存する場合は、コピー同梱せず同一プロジェクトに展開された兄弟スキルを実行時参照で解決する。たとえば docsummary は依存する docextract / docagent を兄弟スキル docextract から解決する。
+    配布スキルは自身の実行体（本体パッケージ・起動スクリプト）を自前の scripts に同梱し、複数スキルが共有する起動基盤（_bootstrap 等）は単一ソースからビルド時に各スキルへ展開する。あるスキルが他スキルのパッケージや依存記述（requirements）へ実行時依存する場合は、コピー同梱せず同一プロジェクトに展開された兄弟スキルを実行時参照で解決する。たとえば docsummary は依存する docextract / docagent パッケージと requirements を兄弟スキル docextract から解決し、自前には持たない。
   status: review
   source:
     doc: src/skills/docsummary/scripts/run_docsummary.py
