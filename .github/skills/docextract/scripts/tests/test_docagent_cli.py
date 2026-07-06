@@ -191,6 +191,73 @@ def test_stdout_flag_bypasses_guard(store, tmp_path, capsys):
     assert rec["returned_chars"] == 40000  # ガードを迂回して全出力
 
 
+# ── ⑥b list/query/facts: 大量件数でも -o / --limit でデータを取り出せる ─────
+def _add_many(store, tmp_path, n: int, chars: int = 500) -> None:
+    for i in range(n):
+        _add_doc(store, tmp_path, f"doc{i:03}.docx", ["あ" * chars])
+
+
+def test_list_over_ceiling_refused_without_escape(store, tmp_path, capsys):
+    # 大量文書の list --json は従来どおり数値ガードで拒否される (回帰防止)。
+    _add_many(store, tmp_path, 80)
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as exc:
+        store("list", "--json")
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "上限" in err and "-o" in err  # 書き出しの逃げ道を案内する
+
+
+def test_list_output_file_bypasses_guard(store, tmp_path, capsys):
+    # -o <file> なら上限超過でもファイルへ全件書き出せる。
+    _add_many(store, tmp_path, 80)
+    out_file = tmp_path / "docs.json"
+    capsys.readouterr()
+    store("list", "--json", "-o", str(out_file))
+    assert "書き出しました" in capsys.readouterr().out
+    docs = json.loads(out_file.read_text(encoding="utf-8"))
+    assert len(docs) == 80
+    assert {d["id"] for d in docs}  # ID を機械可読に取得できる
+
+
+def test_list_limit_offset_paginates(store, tmp_path, capsys):
+    _add_many(store, tmp_path, 80)
+    capsys.readouterr()
+    store("list", "--json", "--limit", "10")
+    captured = capsys.readouterr()
+    page = json.loads(captured.out.strip())
+    assert len(page) == 10
+    assert "--offset 10" in captured.err  # 続きの読み方を案内
+
+    store("list", "--json", "--limit", "10", "--offset", "75")
+    captured = capsys.readouterr()
+    tail = json.loads(captured.out.strip())
+    assert len(tail) == 5  # 末尾は残り 5 件
+    assert "--offset" not in captured.err  # 続きなし
+
+
+def test_query_output_file_bypasses_guard(store, tmp_path, capsys):
+    _add_many(store, tmp_path, 80)
+    out_file = tmp_path / "q.json"
+    capsys.readouterr()
+    store("query", "--json", "-o", str(out_file))
+    assert out_file.exists()
+    assert len(json.loads(out_file.read_text(encoding="utf-8"))) == 80
+
+
+def test_facts_limit_offset_paginates(store, tmp_path, capsys):
+    doc_id = _add_doc(store, tmp_path, "a.docx", ["hi"])
+    store("item-types", "add", "機能要件")
+    for i in range(12):
+        store("fact-add", "--doc", doc_id, "--type", "機能要件",
+              "--statement", f"s{i}", "--evidence", "e")
+    capsys.readouterr()
+    store("facts", "--json", "--limit", "5")
+    captured = capsys.readouterr()
+    assert len(json.loads(captured.out.strip())) == 5
+    assert "--offset 5" in captured.err
+
+
 def _write_config(tmp_path: Path, **values) -> Path:
     cfg = tmp_path / "myconfig.json"
     cfg.write_text(json.dumps(values, ensure_ascii=False), encoding="utf-8")

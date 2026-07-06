@@ -83,3 +83,14 @@
     doc: src/skills/docsummary/scripts/run_docsummary.py
     location: {section: docstring}
     evidence: コピー同梱はせず実行時参照する
+
+- id: dr-machine-output-guard
+  rule_id: DR-08
+  name: 機械可読出力の量制御と脱出ハッチ
+  statement: >-
+    LLM/エージェントに渡す --json 出力は、ホスト（Claude Code の Bash 出力・Copilot のコンテキスト）で黙って切り詰められ欠落するのを防ぐため、文字数上限（ceiling_chars）を超えたら fail-closed で拒否し絞り方を案内する。同時に、フィルタで絞れない大量件数でもデータを取り出せるよう、一覧系（list/query/facts）にはページング（--limit/--offset）とファイル書き出し（-o/--output。ガード対象外）の脱出ハッチを必ず用意する。--stdout はガードを承知で全出力を強制する最終手段。
+  status: review
+  source:
+    doc: src/skills/docextract/docs/usage.md
+    location: {section: 数値ガードと設定ファイル / 大量件数の一覧を取り出す}
+    evidence: -o <ファイル> はガード対象外。--limit/--offset で 1 ページずつ読む。

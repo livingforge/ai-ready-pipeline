@@ -10,3 +10,12 @@
 - { type: follows, from: sk-spec-reconcile, to: dr-02, status: review }
 - { type: follows, from: sk-spec-reconcile, to: dr-04, status: review }
 - { type: follows, from: sk-spec-reconcile, to: dr-skill-executable-cohesion, status: review }
+- type: follows
+  from: mod-docagent
+  to: dr-machine-output-guard
+  status: review
+  source:
+    doc: docagent/cli.py
+    location: {section: _emit / _emit_list}
+    evidence: >-
+      list/query/facts に -o/--output と --limit/--offset を追加し数値ガードの脱出ハッチとする
