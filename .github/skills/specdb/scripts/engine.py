@@ -211,7 +211,7 @@ class Store:
             t = tdir.name
             if t in self.mm.item_types:
                 for f in sorted(tdir.glob("*.yaml")):
-                    for rec in _records(f):
+                    for rec in _records(f, self.problems):
                         self._add_item(t, rec, f, ns)
             elif not ns and t in self.mm.namespaces:
                 self._load_items(tdir, ns=t)   # items/<名前空間>/<種別>/ の 1 階層
@@ -277,7 +277,7 @@ class Store:
                     "error", str(sub),
                     f"relations/ 配下のディレクトリ '{sub.name}' は宣言済みの名前空間のみ可"))
         for f in sorted(rel_dir.glob("*.yaml")):
-            for rec in _records(f):
+            for rec in _records(f, self.problems):
                 rname = rec.pop("type", None)
                 src, dst = rec.pop("from", None), rec.pop("to", None)
                 if rname not in self.mm.relation_types:
@@ -430,9 +430,30 @@ class Store:
         return any(p.level == "error" for p in self.problems)
 
 
-def _records(path: Path) -> list[dict]:
-    with open(path, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def _yaml_error_message(err: yaml.YAMLError) -> str:
+    """YAML パースエラーを利用者向けの説明に整える。
+    引用符なしスカラー中の ': '（コロン+空白）が原因の典型を明示する。"""
+    mark = getattr(err, "problem_mark", None)
+    where = f"{mark.line + 1} 行目付近" if mark is not None else "位置不明"
+    problem = (getattr(err, "problem", "") or "").strip()
+    hint = ""
+    # ': '（コロン+空白）を含む description 等でよく出る典型エラー
+    if "mapping values are not allowed" in problem:
+        hint = ("（description などの値に ': '（コロン+空白）が入ると"
+                'YAML の区切りと解釈される。値を "…" で囲むか >- ブロックにする。'
+                "説明の追加・変更は specdb mutate 経由なら自動でクォートされる）")
+    return f"YAML 文法エラー: {problem or err}（{where}）{hint}"
+
+
+def _records(path: Path, problems: list | None = None) -> list[dict]:
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        if problems is None:
+            raise
+        problems.append(Problem("error", path.name, _yaml_error_message(e)))
+        return []
     if data is None:
         return []
     recs = data if isinstance(data, list) else [data]

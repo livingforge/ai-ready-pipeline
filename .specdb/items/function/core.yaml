@@ -113,10 +113,8 @@
   name: 仕様データの機械検証
   category: 仕様管理
   description: >-
-    ID 一意性・必須属性・enum・多重度 (cardinality)・一意性 (unique)・
-    未定義参照・孤児を検証する。error が 1 件でもあれば設計書生成を中止し
-    exit 1 を返す（CI で PR をブロックできる）。
-  status: approved
+    ID 一意性・必須属性・enum・多重度 (cardinality)・一意性 (unique)・未定義参照・孤児を検証する。壊れた YAML（引用符なしのコロン+空白など）は例外で中断せず error として報告し、コロン起因ならクォート方法を助言する。error が 1 件でもあれば設計書生成を中止し exit 1 を返す（CI で PR をブロックできる）。
+  status: review
   source:
     doc: specdb/README.md
     location: { section: "エンジンが行う汎用検証" }

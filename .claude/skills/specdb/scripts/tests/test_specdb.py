@@ -70,6 +70,25 @@ def test_clean_tree_has_no_problems():
     assert not s.problems, [str(p) for p in s.problems]
 
 
+def test_yaml_syntax_error_becomes_problem():
+    """引用符なしの ': '（コロン+空白）で壊れた YAML は例外にせず error として報告し、
+    コロン起因のヒントを添える（他ファイルの読み込みは続行する）。"""
+    bad = "- id: e1\n  name: 顧客\n  physical_name: 補足: 内部コード\n"
+    s = build({"items/entity/e.yaml": bad, "items/data-item/d.yaml": DATA_OK})
+    assert_problem(s, "YAML 文法エラー", "コロン+空白", "e.yaml")
+    assert "d1" in s.items                                  # 他ファイルは読み込まれる
+
+
+def test_quoted_colon_value_loads_cleanly():
+    """': ' を含む値でも引用符（specdb mutate 相当）なら正常に読める。"""
+    ok = ('- id: e1\n  name: 顧客\n  physical_name: M_CUST\n'
+          '  columns:\n    - { item: d1, physical_name: CODE }\n'
+          '  note: "補足: 内部コード"\n')
+    s = build({"items/entity/e.yaml": ok, "items/data-item/d.yaml": DATA_OK})
+    assert not any("文法エラー" in str(p) for p in s.problems)
+    assert s.items["e1"].attrs["note"] == "補足: 内部コード"
+
+
 def test_cardinality_violation():
     s = build({
         "items/entity/e.yaml": ITEMS_OK + "- { id: e2, name: 空, physical_name: T_EMPTY }\n",
