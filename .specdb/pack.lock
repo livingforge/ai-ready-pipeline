@@ -1,0 +1,6 @@
+# 機械生成。直接編集しない（specdb pack lock で更新する）。
+chain:
+- pack: jp-sier-std
+  resolved_version: 1.1.0
+  content_hash: sha256:b3d14a1b08b0bf1cca7ece7bcbce56da2a4deb3d864dbd9f76d5c61d1c71df62
+  resolved_from: C:/spec-pipeline/specdb/packs/jp-sier-std

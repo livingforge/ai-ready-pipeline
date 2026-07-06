@@ -1,0 +1,147 @@
+# メタモデル — spec-pipeline 資料活用基盤そのものの設計を仕様データとして表現する
+#
+# 正本はこの .specdb/ の items/ + relations/。README.md 等の記述はその出典
+# (source) として参照する。設計書 (out/) はここから生成されるビューであり、
+# 直接編集しない。
+#
+# 語彙: 構成要素（スキル・エージェント・ソースモジュール）が「機能」を実現し、
+#       「データ成果物」を生成・入力し、「設計方針」に従い、
+#       「外部ライブラリ」に依存する。
+#
+# 機械採番の宣言（mutate.py が使う。エンジンの検証には影響しない）:
+#   id_prefix — その種別の ID 接頭辞（add-item が接頭辞を強制する）
+#   sequence  — 連番属性の自動採番 { attribute: 属性名, format: "F-{:02d}" }
+
+version: 1
+
+item_types:
+
+  skill:
+    label: スキル
+    label_field: name
+    id_prefix: sk-
+    attributes:
+      name:    { kind: string, required: true, unique: true }
+      purpose: { kind: string, required: true }
+      runtime: { kind: string }
+
+  agent:
+    label: エージェント
+    label_field: name
+    id_prefix: ag-
+    attributes:
+      name:          { kind: string, required: true, unique: true }
+      phase:         { kind: string, required: true }   # 担当する工程
+      description:   { kind: string, required: true }
+      output_policy: { kind: string }                   # 成果物の規律（出典必須 等）
+
+  module:
+    label: ソースモジュール
+    label_field: name
+    id_prefix: mod-
+    attributes:
+      name:        { kind: string, required: true, unique: true }
+      path:        { kind: string, required: true, unique: true }
+      description: { kind: string, required: true }
+
+  function:
+    label: 機能
+    label_field: name
+    id_prefix: fn-
+    sequence: { attribute: func_id, format: "F-{:02d}" }
+    warn_if_unreferenced: true    # どの構成要素にも実現されない機能は孤児
+    attributes:
+      func_id:     { kind: string, required: true, unique: true }
+      name:        { kind: string, required: true, unique: true }
+      description: { kind: string, required: true }
+      category:    { kind: enum, values: [文書抽出, 資料活用, 仕様管理, 配布], required: true }
+
+  artifact:
+    label: データ成果物
+    label_field: name
+    id_prefix: ar-
+    warn_if_unreferenced: true    # 誰も生成も入力もしない成果物は孤児
+    attributes:
+      name:        { kind: string, required: true, unique: true }
+      path:        { kind: string, required: true }
+      format:      { kind: string, required: true }
+      description: { kind: string, required: true }
+
+  file-format:
+    label: 対応文書形式
+    label_field: name
+    id_prefix: fmt-
+    warn_if_unreferenced: true
+    attributes:
+      name:          { kind: string, required: true, unique: true }
+      extensions:    { kind: string, required: true }
+      contents:      { kind: string, required: true }   # 抽出内容
+      location_keys: { kind: string, required: true }   # 出典位置情報の粒度
+
+  design-rule:
+    label: 設計方針
+    label_field: name
+    id_prefix: dr-
+    sequence: { attribute: rule_id, format: "DR-{:02d}" }
+    warn_if_unreferenced: true    # どの構成要素も従わない方針は孤児
+    attributes:
+      rule_id:   { kind: string, required: true, unique: true }
+      name:      { kind: string, required: true, unique: true }
+      statement: { kind: string, required: true }
+
+  library:
+    label: 外部ライブラリ
+    label_field: name
+    id_prefix: lib-
+    warn_if_unreferenced: true    # どのモジュールも依存しないライブラリは孤児
+    attributes:
+      name:    { kind: string, required: true, unique: true }
+      usage:   { kind: string, required: true }
+      license: { kind: string, required: true }
+
+relation_types:
+
+  realizes:
+    label: 実現する
+    from: [skill, agent, module]
+    to: function
+    cardinality: { to: "1..*" }   # 実現主体のいない機能は error
+
+  produces:
+    label: 生成する
+    from: [skill, agent, module]
+    to: artifact
+    attributes:
+      note: { kind: string }
+
+  consumes:
+    label: 入力とする
+    from: [skill, agent, module]
+    to: artifact
+    attributes:
+      note: { kind: string }
+
+  supports:
+    label: 対応する
+    from: skill
+    to: file-format
+    cardinality: { to: "1..*" }   # どのスキルも対応しない形式は error
+
+  uses:
+    label: 利用する
+    from: agent
+    to: [skill, module]
+
+  follows:
+    label: 方針に従う
+    from: [skill, agent, module]
+    to: design-rule
+    embedded: { field: rules }    # アイテム側に rules: [dr-…] と書ける
+
+  depends-on:
+    label: 依存する
+    from: module
+    to: library
+    embedded: { field: depends, target_key: lib }
+    attributes:
+      note: { kind: string }

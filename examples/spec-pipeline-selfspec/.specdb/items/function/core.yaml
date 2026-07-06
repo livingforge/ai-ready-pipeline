@@ -196,11 +196,11 @@
   category: 仕様管理
   description: >-
     機能の追加・変更・廃止のあとに、実装差分を .specdb の語彙（アイテム・関係）へ写像して正本を更新する。同期候補の列挙（sync_check.py）と正本の更新（mutate.py の plan 適用）を機械化し、新規・変更は status: review で登録、機械検証 error 0 とビュー再生成までを完了の定義（CLAUDE.md）とする。
-  status: approved
+  status: review
   source:
     doc: CLAUDE.md
-    location: { section: "完了の定義（Definition of Done）" }
-    evidence: ".specdb（プロジェクト設計データの正本）を更新済み — 手順は /spec-sync スキルに従う"
+    location: {section: 完了の定義（Definition of Done）}
+    evidence: 本リポの設計データ正本を更新済み — 手順は /spec-sync スキルに従う
 
 - id: fn-build
   func_id: F-13
@@ -335,3 +335,27 @@
     doc: src/skills/spec-reconcile/body.md
     location: {section: 冒頭}
     evidence: 意味的一貫性を 1 箇所に封じ込める
+
+- id: fn-init
+  func_id: F-27
+  name: プロジェクト初期化（空 seed 生成）
+  description: >-
+    消費側プロジェクトに空の .specdb seed を作り、配布された標準パックを継承して仕様データ管理を始められる状態にする。seed はメタモデル（extends 標準パック）＋ sync.yaml ＋ README ＋ 空の items/ relations/ から成り、要件〜詳細設計の標準種別・工程間トレース・文書様式はすべて継承パック（jp-sier-std）が持つ。scaffold の実体化（pack build の対にあたる「パック→空プロジェクト」）で、ツール本体（*.py）・標準パック（packs/）・自己仕様（.specdb）は持ち込まない。--with-samples で学習用サンプルも入れ、--pack で継承パックを差し替え、--force は seed 管理下だけを作り直して out/ を残す。生成直後に engine 検証 error 0 を確認し、継承チェーンが解決できれば pack.lock も書く。
+  category: 配布
+  status: review
+  source:
+    doc: specdb/init.py
+    location: {section: docstring}
+    evidence: 消費側プロジェクトに空の .specdb seed を作る（scaffold を実体化する）
+
+- id: fn-template
+  func_id: F-28
+  name: 消費者向けテンプレートキット生成
+  description: >-
+    展開済みの .claude/.github（skills + agents + 標準パック jp-sier-std + scaffold）と src/template の導入文書（GETTING-STARTED / README / .gitignore）から、消費側プロジェクトが「Use this template」で使える git テンプレートツリーを組み立てる。テンプレには同梱スキルの specdb init で空の .specdb seed を焼き込み、消費側は解凍直後から specdb engine が error 0 で通る状態で工程（要件〜詳細設計）の構造化を始められる。開発元の「育った自己仕様」（examples/spec-pipeline-selfspec/.specdb の正本アイテム）や src・dist・old・tests 等の開発物は含めず、正本データが混入していれば中断する。--build で build_skill を先に走らせ、--git-init でテンプレートリポ化できる。
+  category: 配布
+  status: review
+  source:
+    doc: scripts/build_template.py
+    location: {section: docstring}
+    evidence: 消費者向け git テンプレートツリーを組み立てる。

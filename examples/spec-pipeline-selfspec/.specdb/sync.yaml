@@ -1,0 +1,41 @@
+# 同期チェック (sync_check.py) の設定 — 実装と正本の突合規則
+#
+# path_attributes: リポジトリパスを値に持つアイテム属性（ドリフト検出・実在検査に使う）
+# inventory: リポジトリの実体を列挙し、対応アイテムの有無を突合する規則。
+#   value: 実体名の取り方 — parent | stem | yaml:<キー> | frontmatter:<キー> | lines
+#   match: exact（完全一致）| contains（アイテム側の値が実体名を含めば一致）
+
+version: 1
+
+path_attributes: [path]
+
+# 実在検査する「種別.属性」。artifact.path は実行時に生まれる成果物なので検査しない
+check_exists: ["module.path"]
+
+inventory:
+  # スキル — src/skills/<名前>/ に frontmatter.common.yaml を持つものが実体
+  - type: skill
+    glob: "src/skills/*/frontmatter.common.yaml"
+    key: name
+    value: "yaml:name"
+    match: exact
+
+  # エージェント — src/agents/<名前>/ が実体
+  - type: agent
+    glob: "src/agents/*/frontmatter.common.yaml"
+    key: name
+    value: "yaml:name"
+    match: exact
+
+  # 外部ライブラリ — requirements.txt の各行が実体。
+  # アイテム名は表記ゆれがある（例: "pdfplumber (pdfminer.six)"）ため contains で突合
+  - type: library
+    glob: "requirements.txt"
+    key: name
+    value: lines
+    match: contains
+  - type: library
+    glob: "src/skills/specdb/requirements.txt"
+    key: name
+    value: lines
+    match: contains

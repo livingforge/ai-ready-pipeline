@@ -77,3 +77,15 @@
     doc: docsummary/__init__.py
     location: {section: docstring}
     evidence: docsummary — 登録済み文書を LLM で要約するスキルの本体パッケージ。
+
+- id: mod-template
+  name: テンプレートビルドスクリプト
+  path: scripts/build_template.py
+  description: >-
+    配布物（.claude/.github + 導入文書）から消費者向け git テンプレートツリーを dist/spec-pipeline-template/ に生成し、同梱スキルの specdb init で空の .specdb seed を焼き込む。開発元の育った自己仕様や開発物を除外し、契約として .specdb は空 seed のみ（正本アイテムの混入）を検査する。
+  status: review
+  source:
+    doc: scripts/build_template.py
+    location: {section: docstring}
+    evidence: >-
+      .specdb … 空 seed（同梱スキルの specdb init で焼き込む。解凍直後から engine error 0）

@@ -179,6 +179,28 @@ body.md と docs/ 内の `{{skill_dir}}` はビルド時にプラットフォー
 どこから実行しても動く起動スクリプト
 `python {{skill_dir}}/scripts/run_docextract.py` / `run_docagent.py` を使って書く。
 
+### 消費者向け git テンプレートリポ
+
+新規プロジェクトへ導入する配布物は **git テンプレートリポ**として提供する。
+`build_template.py` が展開済みの `.claude/.github`（skills + agents + 標準パック
+`jp-sier-std` + scaffold）と導入文書から、消費側が「Use this template」で使える
+ツリーを組み立てる:
+
+```powershell
+python scripts\build_template.py --build   # build_skill を先に走らせてから組む
+```
+
+| 出力 | 内容 |
+|--------|------|
+| `dist/spec-pipeline-template/` | `.claude/` `.github/` + 空の `.specdb` seed + `GETTING-STARTED.md`・`README.md`・`.gitignore` |
+
+テンプレートには**空の `.specdb` seed**（`extends: jp-sier-std`。解凍直後から
+`specdb engine` が error 0）を焼き込む。**開発元の「育った自己仕様」は含めない**
+（正本アイテムが混入すれば中断する）。開発元自身の仕様データ（dogfooding）は
+`examples/spec-pipeline-selfspec/.specdb` に置く。消費側は同梱 seed から始めて、
+既存文書を各工程（要件〜詳細設計）へ構造化していく。導入手順は
+[src/template/GETTING-STARTED.md](src/template/GETTING-STARTED.md) が単一ソース。
+
 ## テスト
 
 ```powershell

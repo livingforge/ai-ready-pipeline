@@ -43,6 +43,7 @@ _force_utf8_io()
 
 # サブコマンド -> (ツールファイル, 一行説明)。usage の表示順を兼ねる。
 COMMANDS: dict[str, tuple[str, str]] = {
+    "init": ("init.py", "消費側プロジェクトに空の .specdb seed を作る"),
     "engine": ("engine.py", "検証レポート + 統計（error で exit 1）"),
     "generate": ("generate.py", "設計書を out/ に生成"),
     "conform": ("conform.py", "標準パック準拠検証（L1+L2+lock）"),

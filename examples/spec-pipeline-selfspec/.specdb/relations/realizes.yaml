@@ -52,3 +52,6 @@
 - { type: realizes, from: sk-specdb, to: fn-aggregate, status: approved }
 - { type: realizes, from: mod-specdb, to: fn-aggregate, status: approved }
 - { type: realizes, from: sk-spec-reconcile, to: fn-reconcile, status: review }
+- { type: realizes, from: sk-specdb, to: fn-init, status: review }
+- { type: realizes, from: mod-specdb, to: fn-init, status: review }
+- { type: realizes, from: mod-template, to: fn-template, status: review }
