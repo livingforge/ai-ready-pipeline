@@ -1,4 +1,4 @@
 # 機械生成（specdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
-title: テーブル定義書
-output: テーブル定義書.md
-template: table-spec.md.j2
+title: 詳細設計書
+output: 詳細設計書.md
+template: detail-design.md.j2

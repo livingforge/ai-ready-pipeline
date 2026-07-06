@@ -1,4 +1,18 @@
 # 標準文書カタログの正本 — ここから dist の documents/*.yaml が生成される。
+# 工程順: 要件定義書 → 基本設計書 → 詳細設計書 → トレーサビリティ・マトリクス。
+# 画面/テーブルは基本設計書の章に統合したため、単体の画面仕様書/テーブル定義書は廃止。
+- id: dt-requirement-spec
+  name: requirement-spec
+  title: 要件定義書
+  output: 要件定義書.md
+  template: requirement-spec.md.j2
+  order: 1
+  status: approved
+  source:
+    doc: specdb/packs/jp-sier-std/documents/requirement-spec.yaml
+    location: { section: 文書定義 }
+    evidence: 要件定義書 — 機能/非機能要件を realizes のカバレッジ付きで列挙する台帳（非 abstract）
+
 - id: dt-basic-design
   name: basic-design
   title: システム基本設計書（{system_name}）
@@ -7,33 +21,33 @@
   abstract: true
   doc_no: { pattern: 'SD-[A-Z]{2,4}-\d{3}' }
   required_params: [system_name, doc_no, version, preface.purpose, preface.scope]
-  order: 1
+  order: 2
   status: approved
   source:
     doc: specdb/packs/jp-sier-std/documents/basic-design.yaml
     location: { section: 文書定義 }
-    evidence: システム基本設計書（Excel 風 HTML）— 標準文書の雛形（abstract）
+    evidence: システム基本設計書（Excel 風 HTML）— 概要・画面一覧・テーブル一覧・業務ルール・外部IFの章を持つ雛形（abstract）
 
-- id: dt-table-spec
-  name: table-spec
-  title: テーブル定義書
-  output: テーブル定義書.md
-  template: table-spec.md.j2
-  order: 2
-  status: approved
-  source:
-    doc: specdb/packs/jp-sier-std/documents/table-spec.yaml
-    location: { section: 文書定義 }
-    evidence: テーブル定義書 — 全エンティティの列定義を列挙する台帳（非 abstract）
-
-- id: dt-screen-spec
-  name: screen-spec
-  title: 画面仕様書
-  output: 画面仕様書.md
-  template: screen-spec.md.j2
+- id: dt-detail-design
+  name: detail-design
+  title: 詳細設計書
+  output: 詳細設計書.md
+  template: detail-design.md.j2
   order: 3
   status: approved
   source:
-    doc: specdb/packs/jp-sier-std/documents/screen-spec.yaml
+    doc: specdb/packs/jp-sier-std/documents/detail-design.yaml
     location: { section: 文書定義 }
-    evidence: 画面仕様書 — 全画面の表示項目を列挙する台帳（非 abstract）
+    evidence: 詳細設計書 — モジュール（クラス）/メソッドを refines・realizes 付きで列挙する台帳（非 abstract）
+
+- id: dt-traceability-matrix
+  name: traceability-matrix
+  title: トレーサビリティ・マトリクス
+  output: トレーサビリティ.md
+  template: traceability-matrix.md.j2
+  order: 4
+  status: approved
+  source:
+    doc: specdb/packs/jp-sier-std/documents/traceability-matrix.yaml
+    location: { section: 文書定義 }
+    evidence: 要件→基本設計→詳細設計→メソッドのV字トレースとカバレッジ・ギャップを一覧する台帳（非 abstract）

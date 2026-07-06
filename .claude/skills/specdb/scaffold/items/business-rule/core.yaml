@@ -2,6 +2,7 @@
 # applies_to は constrains 関係の埋め込み記述（ID の単純リスト形式）。
 
 - id: br-0001
+  rule_id: BR-001
   statement: 顧客コードは一度採番したら欠番になっても再利用しない。
   applies_to: [di-0001]
   status: approved
@@ -11,6 +12,7 @@
     evidence: "顧客コードの再利用はしない方針で確定。"
 
 - id: br-0002
+  rule_id: BR-002
   statement: 受注金額が 1,000 万円以上の受注は部門長の承認を必要とする。
   applies_to: [di-0005]
   status: approved
@@ -20,6 +22,7 @@
     evidence: "1,000万円以上の受注は部門長承認を必須とする。"
 
 - id: br-0003
+  rule_id: BR-003
   statement: 受注日は未来日を入力できない。
   applies_to: [di-0004]
   status: review

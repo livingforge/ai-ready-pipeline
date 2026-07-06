@@ -1,10 +1,10 @@
 # jp-sier-std — 日本 SIer 向け設計書様式標準パック（全社標準の想定）
 #
 # このファイルは配布物（消費側プロジェクトが解決する契約面）。
-# 消費側は metamodel.yaml に `extends: jp-sier-std@1.0` と書いて継承する。
+# 消費側は metamodel.yaml に `extends: jp-sier-std@1.1` と書いて継承する。
 pack: jp-sier-std
-version: "1.0.0"
-description: 日本 SIer 向け設計書様式標準（画面・テーブル・業務ルール・外部IF）
+version: "1.1.0"
+description: 日本 SIer 向け設計書様式標準（要件定義〜基本設計〜詳細設計）
 
 metamodel: metamodel/core.yaml
 documents: documents

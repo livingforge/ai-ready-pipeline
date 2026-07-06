@@ -1,104 +1,38 @@
 # メタモデル — このプロジェクトで使えるアイテム種別・属性・関係の宣言
 #
-# エンジン (engine.py) はこのファイルだけを頼りに検証する。
-# 新しい種別・関係の追加はこのファイルと items/ の追記だけで済み、
-# エンジンのコード改修は不要（それが汎用性の実証）。
+# このスキャフォルドは全社標準パック jp-sier-std を継承する「消費側プロジェクト」の
+# 雛形。要件定義〜基本設計〜詳細設計の標準種別（requirement / screen / entity /
+# data-item / business-rule / external-interface / module / method）と工程間トレース
+# （realizes / refines / has-method）はパックから来るので、ここには書かない。
+#
+# プロジェクト固有の追加・厳格化だけをこのファイルに足す（緩和は STD-E1xx で拒否）:
+#   - 新しい種別・関係の追加は自由（例: batch-job）
+#   - 標準種別への属性追加・required 追加・unique 追加などの「厳格化」も可
+#   - パックの解決順: <root>/packs/ → 展開済みスキル同梱 packs/ → SPECDB_PACK_PATH
 #
 # 共通コア属性（全アイテム・全関係が自動的に持つ。ここには書かない）:
-#   id     — 一意な安定 ID（アイテムのみ）
-#   status — draft | review | approved | deprecated
-#   source — 出典 { doc, location, evidence }。複数あればリストで書く
-#
-# 属性の宣言オプション:
-#   kind: string|int|bool|enum / required: true / unique: true
-#   unique はアイテム属性なら種別内で一意、関係属性なら同じ from 内で一意
-#
-# 関係の宣言オプション:
-#   cardinality: { from: "1..*", to: "0..1" } — 各アイテムが持つべき本数の範囲。
-#   from は出ていく本数、to は入ってくる本数。deprecated のアイテムは対象外。
-#   ordered: true — 並びに意味がある関係。記述順が保存され、明示したい場合は
-#   関係に order 属性（int）を書ける（クエリ時に order 順で返る）。
-#
-# 機械採番の宣言（mutate.py が使う。エンジンの検証には影響しない）:
-#   id_prefix — その種別の ID 接頭辞。add-item が接頭辞を強制し、
-#               スラッグ省略時は既存の「接頭辞+数字」ID から次番を採る
-#   sequence  — 連番属性の自動採番 { attribute: 属性名, format: "F-{:02d}" }
+#   id / status (draft|review|approved|deprecated) / source { doc, location, evidence }
 #
 # 名前空間（サブシステム分割。任意）:
-#   namespaces: { pay: 決済, charge: チャージ }
-#   と宣言すると items/<名前空間>/<種別>/ と relations/<名前空間>/ が使え、
-#   配下の ID・参照は自動で <名前空間>: が付く（例: pay:scr-0001）。
-#   名前空間をまたぐ参照はフル ID（pay:di-0001）で書く。
+#   namespaces: { pay: 決済, charge: チャージ } と宣言すると
+#   items/<名前空間>/<種別>/ と relations/<名前空間>/ が使え、ID に <名前空間>: が付く。
 
 version: 1
+extends: jp-sier-std@1.1
 
 item_types:
 
+  # 標準種別への属性追加（厳格化）の例 — パックの data-item に
+  # プロジェクト固有の任意属性 domain（値域メモ）を足す。
   data-item:
-    label: データ項目
-    label_field: name            # 一覧・生成物で表示名に使う属性
-    id_prefix: di-               # 機械採番 (mutate.py) が使う ID 接頭辞
-    warn_if_unreferenced: true   # どの関係からも参照されなければ孤児として警告
     attributes:
-      name:        { kind: string, required: true }
-      type:        { kind: enum, values: [数値, 文字列, 日付, 真偽], required: true }
-      length:      { kind: int }
-      domain:      { kind: string }
-      description: { kind: string }
+      domain: { kind: string }
 
-  entity:
-    label: エンティティ
-    label_field: name
-    id_prefix: ent-
-    attributes:
-      name:          { kind: string, required: true }
-      physical_name: { kind: string, required: true, unique: true }
-      description:   { kind: string }
-
-  business-rule:
-    label: 業務ルール
-    label_field: statement
-    id_prefix: br-
-    attributes:
-      statement: { kind: string, required: true }
-
-  screen:                        # ← エンジン改修なしで追加した種別（汎用性の実証）
-    label: 画面
-    label_field: name
-    id_prefix: scr-
-    attributes:
-      name:        { kind: string, required: true }
-      screen_id:   { kind: string, required: true, unique: true }
-      description: { kind: string }
-
-relation_types:
-
-  has-column:
-    label: 列
-    from: entity
-    to: data-item
-    cardinality: { from: "1..*" }   # 列を 1 本も持たないエンティティは error
-    ordered: true                   # 列の並び順に意味がある（記述順 or order 属性）
-    # entity の YAML 内に `columns:` として埋め込み記述できる。
-    # エンジンが読み込み時に独立した関係レコードへ正規化する。
-    embedded: { field: columns, target_key: item }
-    attributes:
-      physical_name: { kind: string, required: true, unique: true }  # 同一テーブル内で一意
-      pk:            { kind: bool }
-      required:      { kind: bool }
-      note:          { kind: string }
-
-  constrains:
-    label: 制約する
-    from: business-rule
-    to: [data-item, screen]
-    embedded: { field: applies_to }   # target_key なし = ID の単純リスト
-
-  displays:
-    label: 表示する
-    from: screen
-    to: data-item
-    cardinality: { from: "1..*" }   # 何も表示しない画面は error
-    ordered: true                   # 画面上の項目の並び順
-    attributes:
-      note: { kind: string }
+# プロジェクト固有の新しい種別を足すこともできる（無ければ不要）:
+#   batch-job:
+#     label: バッチジョブ
+#     label_field: name
+#     id_prefix: job-
+#     attributes:
+#       name:     { kind: string, required: true, unique: true }
+#       schedule: { kind: string, required: true }

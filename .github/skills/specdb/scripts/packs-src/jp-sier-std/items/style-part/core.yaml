@@ -10,6 +10,16 @@
     location: { section: マクロ集 }
     evidence: 伝統的な日本の Excel 設計書風 HTML の共通部品集
 
+- id: sp-requirement-spec
+  name: 要件定義書テンプレート
+  file: requirement-spec.md.j2
+  role: document
+  status: approved
+  source:
+    doc: specdb/packs/jp-sier-std/templates/requirement-spec.md.j2
+    location: { section: Markdown }
+    evidence: 機能/非機能要件を realizes のカバレッジ付きで列挙する
+
 - id: sp-basic-design
   name: 基本設計書テンプレート
   file: basic-design.html.j2
@@ -20,22 +30,22 @@
     location: { section: block テンプレート }
     evidence: block 規約に従い cover / revision_history / toc / preface / chapters / appendix を定義
 
-- id: sp-table-spec
-  name: テーブル定義書テンプレート
-  file: table-spec.md.j2
+- id: sp-detail-design
+  name: 詳細設計書テンプレート
+  file: detail-design.md.j2
   role: document
   status: approved
   source:
-    doc: specdb/packs/jp-sier-std/templates/table-spec.md.j2
+    doc: specdb/packs/jp-sier-std/templates/detail-design.md.j2
     location: { section: Markdown }
-    evidence: 全エンティティの列定義を列挙する
+    evidence: モジュール（クラス）/メソッドを refines・realizes 付きで列挙する
 
-- id: sp-screen-spec
-  name: 画面仕様書テンプレート
-  file: screen-spec.md.j2
+- id: sp-traceability-matrix
+  name: トレーサビリティ・マトリクステンプレート
+  file: traceability-matrix.md.j2
   role: document
   status: approved
   source:
-    doc: specdb/packs/jp-sier-std/templates/screen-spec.md.j2
+    doc: specdb/packs/jp-sier-std/templates/traceability-matrix.md.j2
     location: { section: Markdown }
-    evidence: 全画面の表示項目を列挙する
+    evidence: 要件→設計→メソッドのトレースとカバレッジ・ギャップを一覧する

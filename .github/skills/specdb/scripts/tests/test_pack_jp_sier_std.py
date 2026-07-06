@@ -29,7 +29,7 @@ def consuming_project() -> Path:
     # 同梱パックを vendored 位置（<root>/packs/jp-sier-std）へ複製して解決させる
     import shutil
     shutil.copytree(PACK_DIR, root / "packs" / "jp-sier-std")
-    write(root, "metamodel.yaml", "version: 1\nextends: jp-sier-std@1.0\n")
+    write(root, "metamodel.yaml", "version: 1\nextends: jp-sier-std@1.1\n")
     write(root, "documents/basic-design.yaml",
           "from_standard: basic-design\nsystem_name: 受発注\ndoc_no: SD-ORD-001\n"
           "version: '1.0'\npreface: { purpose: 目的である, scope: 範囲である }\n")
@@ -48,6 +48,24 @@ def consuming_project() -> Path:
     write(root, "relations/displays.yaml",
           "- { type: displays, from: scr-0001, to: di-0001, status: approved }\n"
           "- { type: displays, from: scr-0001, to: di-0002, status: approved }\n")
+    # 工程の両端（要件・詳細設計）とトレース。要件 req-0001 は realizes で実現され、
+    # 詳細設計 mod-0001 は refines で画面を、has-method でメソッドを持つ。
+    write(root, "items/requirement/core.yaml",
+          "- { id: req-0001, req_id: F-01, name: 顧客照会, kind: 機能, "
+          "statement: 顧客を一覧照会できる, status: approved }\n")
+    write(root, "items/module/core.yaml",
+          "- { id: mod-0001, module_id: MOD-01, class_name: CustomerListController, "
+          "layer: Controller, package: jp.co.demo, description: 顧客一覧の制御, status: approved }\n")
+    write(root, "items/method/core.yaml",
+          "- { id: mth-0001, method_id: MTH-01, signature: 'CustomerListController#list', "
+          "description: 顧客一覧を返す, status: approved }\n")
+    write(root, "relations/realizes.yaml",
+          "- { type: realizes, from: scr-0001, to: req-0001, status: approved }\n"
+          "- { type: realizes, from: mod-0001, to: req-0001, status: approved }\n")
+    write(root, "relations/refines.yaml",
+          "- { type: refines, from: mod-0001, to: scr-0001, status: approved }\n")
+    write(root, "relations/has-method.yaml",
+          "- { type: has-method, from: mod-0001, to: mth-0001, status: approved }\n")
     return root
 
 
@@ -63,9 +81,12 @@ def test_pack_resolves_and_merges_clean():
     store, problems = load(root)
     assert [p.name for p in store.packs] == ["jp-sier-std"]
     assert not store.has_errors(), problems
-    # パックのドメイン種別がマージされている
-    for t in ("screen", "entity", "data-item", "business-rule", "external-interface"):
+    # パックのドメイン種別（要件〜詳細設計の全工程）がマージされている
+    for t in ("requirement", "screen", "entity", "data-item", "business-rule",
+              "external-interface", "module", "method"):
         assert t in store.mm.item_types
+    for r in ("realizes", "refines", "has-method"):
+        assert r in store.mm.relation_types
 
 
 def test_data_validates_against_pack_model():
@@ -75,6 +96,34 @@ def test_data_validates_against_pack_model():
     # has-column が embedded から正規化され、順序が保たれている
     cols = store.relations_of("has-column", src="ent-0001")
     assert [c.attrs["physical_name"] for c in cols] == ["CUST_CD", "CUST_NM"]
+
+
+def test_trace_relations_across_phases():
+    """要件↔基本設計↔詳細設計のトレース（realizes/refines/has-method）が張れて検証を通る。"""
+    root = consuming_project()
+    store, problems = load(root)
+    assert not store.has_errors(), problems
+    # 画面もモジュールも要件を実現している
+    realizers = {r.src for r in store.relations_of("realizes", dst="req-0001")}
+    assert realizers == {"scr-0001", "mod-0001"}
+    # モジュールは画面を詳細化し、メソッドを持つ
+    assert store.relations_of("refines", src="mod-0001")[0].dst == "scr-0001"
+    assert store.relations_of("has-method", src="mod-0001")[0].dst == "mth-0001"
+    # 実現された要件・付属メソッドは孤児警告されない
+    assert not any("req-0001" in m and "孤児" in m for m in problems)
+    assert not any("mth-0001" in m and "孤児" in m for m in problems)
+
+
+def test_unrealized_requirement_warns_as_coverage_gap():
+    """どの設計要素からも realizes されない要件はカバレッジ・ギャップとして warn。"""
+    root = consuming_project()
+    write(root, "items/requirement/core.yaml",
+          "- { id: req-0001, req_id: F-01, name: 顧客照会, kind: 機能, "
+          "statement: 顧客を一覧照会できる, status: approved }\n"
+          "- { id: req-0002, req_id: F-02, name: 未実装機能, kind: 機能, "
+          "statement: まだ設計に落ちていない, status: approved }\n")
+    _store, problems = load(root)
+    assert any("req-0002" in m and "孤児" in m for m in problems)
 
 
 def test_no_false_orphan_warnings_for_screens():
@@ -119,7 +168,7 @@ def test_screen_description_required_at_review():
 def test_project_cannot_relax_screen_id_unique():
     root = consuming_project()
     write(root, "metamodel.yaml",
-          "version: 1\nextends: jp-sier-std@1.0\n"
+          "version: 1\nextends: jp-sier-std@1.1\n"
           "item_types:\n  screen:\n    attributes: { screen_id: { unique: false } }\n")
     _store, problems = load(root)
     assert any("STD-E103" in m for m in problems)
@@ -132,23 +181,28 @@ def test_generates_all_documents():
     store = Store.load(root)
     packs = store.packs
     docs = dict(standard.collect_documents(root, packs, store.problems))
-    assert set(docs) == {"basic-design", "table-spec", "screen-spec"}
+    assert set(docs) == {"basic-design", "requirement-spec",
+                         "detail-design", "traceability-matrix"}
     # abstract 基本設計書はパラメータ展開済み
     assert docs["basic-design"]["output"] == "基本設計書_受発注.html"
 
     env = make_env(store, standard.template_search_dirs(root, packs),
                    standard.prefix_map(packs))
+    rendered = {}
     for name, doc in docs.items():
-        text = env.get_template(doc["template"]).render(
+        rendered[name] = env.get_template(doc["template"]).render(
             doc=doc, store=store, mm=store.mm,
             generated_at="2026-07-05T00:00:00+09:00", data_rev="testrev",
             data_history=[])
-        assert text.strip(), f"{name} が空描画"
-    # テーブル定義書に列の物理名が出る
-    tbl = env.get_template(docs["table-spec"]["template"]).render(
-        doc=docs["table-spec"], store=store, mm=store.mm,
-        generated_at="2026-07-05T00:00:00+09:00", data_rev="testrev", data_history=[])
-    assert "CUST_CD" in tbl and "M_CUSTOMER" in tbl
+        assert rendered[name].strip(), f"{name} が空描画"
+    # 基本設計書（テーブル一覧の章）に列の物理名が出る
+    assert "CUST_CD" in rendered["basic-design"] and "M_CUSTOMER" in rendered["basic-design"]
+    # 詳細設計書にモジュール（クラス）とメソッドが出る
+    assert "CustomerListController" in rendered["detail-design"]
+    assert "CustomerListController#list" in rendered["detail-design"]
+    # トレーサビリティ表に要件と実現の連鎖が出る
+    assert "F-01" in rendered["traceability-matrix"]
+    assert "CustomerListController" in rendered["traceability-matrix"]
 
 
 def test_block_override_via_std_prefix():

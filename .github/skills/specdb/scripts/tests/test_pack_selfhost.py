@@ -50,8 +50,9 @@ def test_build_reproduces_committed_dist():
     into.mkdir()
     rc = packmod._cmd_build(_authoring_copy(), into)
     assert rc == 0
-    targets = ["documents/basic-design.yaml", "documents/table-spec.yaml",
-               "documents/screen-spec.yaml", "conformance/rules.yaml"]
+    targets = ["documents/requirement-spec.yaml", "documents/basic-design.yaml",
+               "documents/detail-design.yaml", "documents/traceability-matrix.yaml",
+               "conformance/rules.yaml"]
     for name in targets:
         built = yaml.safe_load((into / name).read_text(encoding="utf-8"))
         committed = yaml.safe_load((DIST / name).read_text(encoding="utf-8"))

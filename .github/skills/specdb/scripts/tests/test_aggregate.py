@@ -24,7 +24,7 @@ def write(base: Path, rel: str, text: str) -> None:
 def project(name: str, data_items: str, screens: str) -> Path:
     root = Path(tempfile.mkdtemp(prefix=f"agg-{name}-"))
     shutil.copytree(PACK_DIR, root / "packs" / "jp-sier-std")
-    write(root, "metamodel.yaml", "version: 1\nextends: jp-sier-std@1.0\n")
+    write(root, "metamodel.yaml", "version: 1\nextends: jp-sier-std@1.1\n")
     write(root, "items/data-item/core.yaml", data_items)
     write(root, "items/screen/core.yaml", screens)
     return root
@@ -76,4 +76,4 @@ def test_type_filter_limits_census_and_skips_enum():
 
 def test_pack_chain_shown_per_project():
     report = aggregate.build_report(make_projects())
-    assert report.count("jp-sier-std@1.0.0") >= 2
+    assert report.count("jp-sier-std@1.1.0") >= 2

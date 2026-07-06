@@ -1,11 +1,27 @@
-# jp-sier-std ドメインメタモデル — SIer の基本設計で扱う標準的な仕様種別
+# jp-sier-std ドメインメタモデル — SIer の要件定義〜詳細設計で扱う標準的な仕様種別
 #
 # 消費側はこれを土台に「追加・厳格化」だけができる（緩和は STD-E1xx で拒否）。
-# 画面・エンティティ（テーブル）・データ項目・業務ルール・外部インターフェースと
-# それらの標準的な関係を宣言する。
+# 工程で並べると:
+#   要件工程    : requirement（機能/非機能要件）
+#   基本設計工程: screen（画面）/ entity（テーブル）/ data-item（データ項目）/
+#                 business-rule（業務ルール）/ external-interface（外部IF）
+#   詳細設計工程: module（モジュール/クラス）/ method（メソッド）
+# 工程間トレース: realizes（設計要素→要件）/ refines（詳細設計→基本設計）。
 version: 1
 
 item_types:
+
+  requirement:
+    label: 要件
+    label_field: name
+    id_prefix: req-
+    warn_if_unreferenced: true   # どの設計要素にも実現されない要件 = カバレッジ欠落として可視化
+    attributes:
+      req_id:      { kind: string, required: true, unique: true }
+      name:        { kind: string, required: true }
+      kind:        { kind: enum, values: [機能, 非機能], required: true }
+      statement:   { kind: string, required: true }
+      description: { kind: string }
 
   screen:
     label: 画面
@@ -62,6 +78,28 @@ item_types:
       protocol:    { kind: string }
       description: { kind: string, required: true }
 
+  module:
+    label: モジュール
+    label_field: class_name
+    id_prefix: mod-
+    # モジュール（クラス）は関係の起点（from）専用で、通常どこからも参照されない。
+    attributes:
+      module_id:   { kind: string, required: true, unique: true }
+      class_name:  { kind: string, required: true, unique: true }
+      layer:       { kind: enum, values: [Controller, Service, Repository, Validator, Batch, その他], extensible: true }
+      package:     { kind: string }
+      description: { kind: string, required: true }   # 責務
+
+  method:
+    label: メソッド
+    label_field: signature
+    id_prefix: mth-
+    warn_if_unreferenced: true   # どのモジュールにも属さないメソッド = 孤児
+    attributes:
+      method_id:   { kind: string, required: true, unique: true }
+      signature:   { kind: string, required: true, unique: true }
+      description: { kind: string, required: true }
+
 relation_types:
 
   has-column:
@@ -98,3 +136,21 @@ relation_types:
     to: entity
     attributes:
       note: { kind: string }
+
+  realizes:
+    label: 実現する
+    from: [screen, entity, business-rule, external-interface, module]
+    to: requirement
+    # cardinality は課さない: 未実現要件は error にせず requirement の
+    # warn_if_unreferenced でカバレッジ・ギャップとして可視化する
+
+  refines:
+    label: 詳細化する
+    from: module
+    to: [screen, entity, external-interface]
+
+  has-method:
+    label: メソッド
+    from: module
+    to: method
+    ordered: true

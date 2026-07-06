@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
                 generated_at=generated_at, data_rev=rev, data_history=data_history)
             dest = out_dir / out_rel
             dest.parent.mkdir(parents=True, exist_ok=True)   # 副ディレクトリ出力に対応
-            dest.write_text(text, encoding="utf-8")
+            dest.write_text(text, encoding="utf-8", newline="\n")
             print(f"生成しました: {dest}")
             n_out += 1
 

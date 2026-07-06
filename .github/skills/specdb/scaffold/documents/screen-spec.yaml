@@ -1,6 +1,0 @@
-# 文書定義: 画面仕様書
-# 文書種別の追加 = この YAML + テンプレート 1 枚（コード改修なし）の実証。
-
-title: 画面仕様書
-output: 画面仕様書.md
-template: screen-spec.md.j2

@@ -1,5 +1,6 @@
 # 文書種別 → 使用する様式部品（トレーサビリティ）
-- { type: renders, from: dt-basic-design, to: sp-house-style, status: approved }
-- { type: renders, from: dt-basic-design, to: sp-basic-design, status: approved }
-- { type: renders, from: dt-table-spec,   to: sp-table-spec,   status: approved }
-- { type: renders, from: dt-screen-spec,  to: sp-screen-spec,  status: approved }
+- { type: renders, from: dt-requirement-spec,    to: sp-requirement-spec,    status: approved }
+- { type: renders, from: dt-basic-design,        to: sp-house-style,         status: approved }
+- { type: renders, from: dt-basic-design,        to: sp-basic-design,        status: approved }
+- { type: renders, from: dt-detail-design,       to: sp-detail-design,       status: approved }
+- { type: renders, from: dt-traceability-matrix, to: sp-traceability-matrix, status: approved }

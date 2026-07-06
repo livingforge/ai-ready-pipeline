@@ -1,0 +1,24 @@
+# 要件の正本（要件工程）— kind は 機能 / 非機能。
+# realizes 関係で基本設計・詳細設計へ接続される。どの設計要素にも realizes
+# されない要件はカバレッジ・ギャップとして warn（孤児）になる。
+- id: req-0001
+  req_id: F-01
+  name: 受注一覧照会
+  kind: 機能
+  statement: 利用者は受注を検索条件で絞り込み、一覧で照会できる。
+  status: approved
+  source:
+    doc: 要件定義書.docx
+    location: { page: 5 }
+    evidence: "受注は日付・金額・顧客で絞り込んで一覧照会できること。"
+
+- id: req-0002
+  req_id: NFR-01
+  name: 一覧の応答時間
+  kind: 非機能
+  statement: 受注一覧の検索応答は通常時 3 秒以内とする。
+  status: review
+  source:
+    doc: 要件定義書.docx
+    location: { page: 30 }
+    evidence: "検索系画面の応答時間は 3 秒以内。"

@@ -1,0 +1,25 @@
+# モジュール（クラス）の正本（詳細設計工程）— refines で基本設計を、realizes で要件を、
+# has-method でメソッドを持つ。layer は Controller/Service/Repository/Validator/Batch（拡張可）。
+- id: mod-0001
+  module_id: MOD-01
+  class_name: OrderListController
+  layer: Controller
+  package: jp.co.example.order
+  description: 受注一覧画面のリクエスト受付・検索条件のバインド・画面遷移制御。
+  status: approved
+  source:
+    doc: 詳細設計書_受注一覧.docx
+    location: { section: モジュール構成 }
+    evidence: "受注一覧はレイヤードアーキテクチャで実装する。"
+
+- id: mod-0002
+  module_id: MOD-02
+  class_name: OrderSearchService
+  layer: Service
+  package: jp.co.example.order
+  description: 受注検索のトランザクション制御。検索条件から受注を絞り込み返す。
+  status: approved
+  source:
+    doc: 詳細設計書_受注一覧.docx
+    location: { section: モジュール構成 }
+    evidence: "OrderSearchService が受注検索を担う。"

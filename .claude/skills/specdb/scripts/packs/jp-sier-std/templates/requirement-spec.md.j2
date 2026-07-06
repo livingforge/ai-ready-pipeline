@@ -1,0 +1,15 @@
+# {{ doc.title }}
+
+> データ版 {{ data_rev }} から自動生成（{{ generated_at[:10] }}）。本書は仕様データの
+> ビューであり直接編集しない。要件は realizes 関係で基本設計・詳細設計に接続される。
+
+{% for kind in ['機能', '非機能'] %}
+## {{ '機能要件' if kind == '機能' else '非機能要件' }}
+
+| 要件ID | 要件名 | 内容 | 実現する設計要素 |
+|--------|--------|------|------------------|
+{% for r in store.items_of('requirement') if r.attrs.kind == kind %}
+| {{ r.attrs.req_id }} | {{ r.attrs.name }} | {{ r.attrs.statement }} | {{ store.relations_of('realizes', dst=r.id)|map(attribute='src')|map('item_label')|join('、') or '⚠️ 未実現（カバレッジ・ギャップ）' }} |
+{% endfor %}
+
+{% endfor %}

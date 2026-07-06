@@ -1,0 +1,11 @@
+# メソッドの正本（詳細設計工程）— has-method でモジュールに属する。
+# 設計書に処理仕様が記載されたメソッドを載せる。
+- id: mth-0001
+  method_id: MTH-01
+  signature: "OrderSearchService#search"
+  description: 検索条件（期間・顧客・金額）で受注を絞り込み、一覧を返す。件数上限は 1000 件。
+  status: approved
+  source:
+    doc: 詳細設計書_受注一覧.docx
+    location: { section: 処理仕様 }
+    evidence: "search は検索条件で受注を絞り込み一覧を返す。"

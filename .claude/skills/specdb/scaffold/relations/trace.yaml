@@ -1,0 +1,7 @@
+# 工程間トレース — realizes（設計→要件）/ refines（詳細設計→基本設計）/ has-method。
+- { type: realizes, from: scr-0001, to: req-0001, status: approved }   # 受注一覧画面 → 受注一覧照会
+- { type: realizes, from: mod-0002, to: req-0001, status: approved }   # OrderSearchService → 受注一覧照会
+- { type: refines,  from: mod-0001, to: scr-0001, status: approved }   # OrderListController → 受注一覧画面
+- { type: refines,  from: mod-0002, to: ent-0002, status: approved }   # OrderSearchService → 受注テーブル
+- { type: has-method, from: mod-0002, to: mth-0001, status: approved } # OrderSearchService#search
+# 注: req-0002(NFR-01 応答時間) は意図的に未実現 → カバレッジ・ギャップの warn 例
