@@ -50,6 +50,14 @@ venv by the bootstrap above; call it as `.venv/Scripts/docextract` if the venv
 is not activated). It works from any directory inside the project. Before the
 venv exists, use `python .github/skills/docextract extract ...` instead — same interface.
 
+> **Windows/PowerShell note.** A bare `.venv\Scripts\docextract` can be mistaken
+> for a PowerShell module (`CouldNotAutoLoadModule`). Invoke it with the call
+> operator and the `.exe` suffix — `& ".venv\Scripts\docextract.exe" ...` — or
+> activate first (`.venv\Scripts\Activate.ps1`) and call `docextract ...`, or use
+> `python .github/skills/docextract ...`. When shelling out from **Python** (`subprocess`),
+> decode child output as UTF-8 — pass `encoding="utf-8"` (not `text=True`, which
+> uses cp932 on Windows and raises `UnicodeDecodeError`). See `docs/usage.md`.
+
 ```bash
 docextract extract <files...> -o <output-dir>
 docextract extract --dir <folder> -o <output-dir>     # batch a folder

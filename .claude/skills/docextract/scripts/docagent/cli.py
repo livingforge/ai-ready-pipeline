@@ -98,6 +98,53 @@ def _emit(obj, as_json: bool, human, *, hint: str | None = None) -> None:
         human(obj)
 
 
+def _page(items: list, offset: int, limit: int | None) -> tuple[list, int, int | None]:
+    """``offset``/``limit`` でスライスし ``(page, total, next_offset)`` を返す。
+
+    ``limit`` が None なら offset 以降を全件。``next_offset`` は続きがあるときの
+    次の開始位置 (無ければ None)。offset が範囲外・負でも安全に空/先頭に丸める。
+    """
+    total = len(items)
+    offset = max(0, offset)
+    page = items[offset:] if limit is None else items[offset : offset + limit]
+    end = offset + len(page)
+    return page, total, (end if end < total else None)
+
+
+def _emit_list(items: list, args, human, *, hint: str, noun: str) -> None:
+    """list/query/facts 系 (射影済みリスト) の出力を捌く。
+
+    大量コーパスで ``--json`` の数値ガードに阻まれてもデータを取り出せるよう、
+    2 つの脱出ハッチを提供する:
+
+    - ``--offset/--limit`` でページングする。1 ページが上限に収まれば通り、続きが
+      あれば次の ``--offset`` を stderr で案内する (``text`` と同じ流儀)。
+    - ``-o/--output <file>`` で全件 (またはページ) をファイルへ書き出す。ファイルは
+      呼び出し側コンテキストを圧迫しないためガードを外す (``export`` と同じ扱い)。
+
+    どちらも使わなければ従来どおり ``_emit`` の数値ガードが効く。
+    """
+    offset = getattr(args, "offset", 0) or 0
+    limit = getattr(args, "limit", None)
+    page, total, next_offset = _page(items, offset, limit)
+    output = getattr(args, "output", None)
+    if output:
+        Path(output).write_text(
+            json.dumps(page, ensure_ascii=False, indent=2 if _PRETTY else None) + "\n",
+            encoding="utf-8",
+        )
+        ranged = "" if (offset == 0 and limit is None) else f" [{offset}–{offset + len(page)} / 全 {total}]"
+        print(f"書き出しました: {output} ({len(page)} 件の{noun}{ranged})")
+        return
+    _emit(page, args.json, human, hint=hint)
+    if next_offset is not None:
+        print(
+            f"… [{offset}–{offset + len(page)} / 全 {total} 件の{noun}]。"
+            f"続きは --offset {next_offset}、全件は -o <ファイル> に書き出し",
+            file=sys.stderr,
+        )
+
+
 def _doc_line(d: dict) -> str:
     dt = d.get("doctype") or "—"
     preview = (d.get("preview") or "").replace("\n", " ")
@@ -247,28 +294,32 @@ def cmd_text(args):
 def cmd_list(args):
     lib = _load(args)
     docs = _project(lib.documents, args.full)
-    _emit(
+    _emit_list(
         docs,
-        args.json,
+        args,
         lambda o: (
             print(f"登録文書 {len(o)} 件:")
             or [print("  " + _doc_line(d)) for d in o]
             or (print("  (なし)") if not o else None)
         ),
-        hint="query で --doctype/--text で絞る、または --stdout で全出力",
+        hint="query で --doctype/--text で絞る・--limit/--offset でページング・"
+        "-o <ファイル> に書き出し、または --stdout で全出力",
+        noun="文書",
     )
 
 
 def cmd_query(args):
     lib = _load(args)
     docs = _project(lib.query(doctype=args.doctype, text=args.text), args.full)
-    _emit(
+    _emit_list(
         docs,
-        args.json,
+        args,
         lambda o: (
             print(f"該当 {len(o)} 件:") or [print("  " + _doc_line(d)) for d in o]
         ),
-        hint="--doctype/--text でさらに絞る、または --stdout で全出力",
+        hint="--doctype/--text でさらに絞る・--limit/--offset でページング・"
+        "-o <ファイル> に書き出し、または --stdout で全出力",
+        noun="文書",
     )
 
 
@@ -426,14 +477,16 @@ def cmd_facts(args):
     fs = _load_facts(args)
     items = fs.query(doc_id=args.doc, type=args.type, text=args.text)
     payload = items if args.full else [_slim_fact(it) for it in items]
-    _emit(
+    _emit_list(
         payload,
-        args.json,
+        args,
         lambda o: (
             print(f"ファクト {len(o)} 件:") or [print("  " + _fact_line(it)) for it in o]
             or (print("  (なし)") if not o else None)
         ),
-        hint="--doc/--type/--text で絞る、または --stdout で全出力",
+        hint="--doc/--type/--text で絞る・--limit/--offset でページング・"
+        "-o <ファイル> に書き出し、または --stdout で全出力",
+        noun="ファクト",
     )
 
 
@@ -599,6 +652,22 @@ def build_parser() -> argparse.ArgumentParser:
     def add(name, help_):
         return sub.add_parser(name, help=help_, parents=[common])
 
+    def add_list_opts(sp):
+        # list/query/facts (射影済みリスト) 共通のページング・書き出しオプション。
+        # 大量コーパスで --json の数値ガードに阻まれてもデータを取り出せる脱出ハッチ。
+        sp.add_argument(
+            "-o", "--output",
+            help="JSON をファイルへ書き出す (数値ガード対象外。大量件数の取得用)",
+        )
+        sp.add_argument(
+            "--limit", type=int, default=None,
+            help="返す最大件数 (既定は全件)。--offset と併せてページングする",
+        )
+        sp.add_argument(
+            "--offset", type=int, default=0,
+            help="読み出し開始位置 (既定 0)。前回の次オフセットを渡して続きを読む",
+        )
+
     add("init", "ストアと doctypes.json / facts.json を初期化").set_defaults(func=cmd_init)
 
     sp = add("prep", "取り込み準備: 必要なら登録し、種別候補+本文抜粋を1回で返す")
@@ -651,6 +720,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="metadata・パス等を含む完全な dict を出力 (既定はスリム射影)",
     )
+    add_list_opts(sp)
     sp.set_defaults(func=cmd_list)
 
     sp = add("query", "条件で絞り込み")
@@ -661,6 +731,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="metadata・パス等を含む完全な dict を出力 (既定はスリム射影)",
     )
+    add_list_opts(sp)
     sp.set_defaults(func=cmd_query)
 
     add("stats", "文書種別別の集計").set_defaults(func=cmd_stats)
@@ -721,6 +792,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="evidence (原文) を短縮せず全文出力する (既定は 200 字で短縮)",
     )
+    add_list_opts(sp)
     sp.set_defaults(func=cmd_facts)
 
     sp = add("fact-remove", "ファクトを削除")
