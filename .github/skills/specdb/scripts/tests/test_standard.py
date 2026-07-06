@@ -3,12 +3,14 @@
 
 設計: .specdb/docs/standard-pack-design.md（Phase 1 の範囲）。
 """
+import os
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import standard  # noqa: E402
+import yaml  # noqa: E402
 from engine import Problem  # noqa: E402
 from generate import make_env  # noqa: E402
 
@@ -244,3 +246,65 @@ def test_non_shadowing_template_is_clean():
     root = template_fixture()
     write_tree(root, {"templates/own.md.j2": "プロジェクト独自"})
     assert check_overrides(root) == []
+
+
+# ---------- pack.lock の移植性（絶対パスを残さない・照合はパス非依存） ----------
+
+MINI_PACK = "pack: mini\nversion: '1.0.0'\ndescription: 極小\n"
+MINI_MM = "version: 1\n"
+
+
+def test_lock_resolved_from_is_relative_never_absolute():
+    """root 配下に無いパック（SPECDB_PACK_PATH 経由）でも resolved_from は
+    絶対パスにならない（ドライブ名・ユーザ名を lock に残さない）。"""
+    packs_dir = build({"mini/pack.yaml": MINI_PACK,
+                       "mini/metamodel/core.yaml": MINI_MM})
+    root = build({"metamodel.yaml": "version: 1\nextends: mini@1.0\n"})
+    old = os.environ.get("SPECDB_PACK_PATH")
+    os.environ["SPECDB_PACK_PATH"] = str(packs_dir)
+    try:
+        packs, problems = resolve(root)
+        assert problems == [] and packs
+        rf = standard.chain_lock(root, packs)["chain"][0]["resolved_from"]
+        assert not os.path.isabs(rf), rf
+        assert ":" not in rf, rf          # Windows のドライブ名が出ない
+        assert not rf.startswith("/"), rf
+    finally:
+        if old is None:
+            os.environ.pop("SPECDB_PACK_PATH", None)
+        else:
+            os.environ["SPECDB_PACK_PATH"] = old
+
+
+def test_verify_lock_ignores_resolved_from():
+    """resolved_from はレイアウトで変わる情報。version + 内容ハッシュが一致すれば
+    frozen でも一致とみなす（別マシン/別レイアウトで conform が誤検知しない）。"""
+    root = build({"metamodel.yaml": "version: 1\nextends: mini@1.0\n",
+                  "packs/mini/pack.yaml": MINI_PACK,
+                  "packs/mini/metamodel/core.yaml": MINI_MM})
+    packs, problems = resolve(root)
+    assert problems == []
+    standard.write_lock(root, packs)
+    lockp = root / "pack.lock"
+    data = yaml.safe_load(lockp.read_text(encoding="utf-8"))
+    data["chain"][0]["resolved_from"] = "C:/somewhere/else/packs/mini"  # 別マシン風
+    lockp.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    probs: list[Problem] = []
+    standard.verify_lock(root, packs, probs, frozen=True)
+    assert probs == []
+
+
+def test_verify_lock_flags_version_or_hash_mismatch():
+    """同一性（版・内容ハッシュ）が食い違えば frozen で error を出す。"""
+    root = build({"metamodel.yaml": "version: 1\nextends: mini@1.0\n",
+                  "packs/mini/pack.yaml": MINI_PACK,
+                  "packs/mini/metamodel/core.yaml": MINI_MM})
+    packs, problems = resolve(root)
+    standard.write_lock(root, packs)
+    lockp = root / "pack.lock"
+    data = yaml.safe_load(lockp.read_text(encoding="utf-8"))
+    data["chain"][0]["content_hash"] = "sha256:deadbeef"
+    lockp.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    probs: list[Problem] = []
+    standard.verify_lock(root, packs, probs, frozen=True)
+    assert any(p.level == "error" and "STD-W003" in p.message for p in probs)

@@ -555,10 +555,21 @@ def check_conformance_rules(root: Path, packs: list[Pack], store,
 # ---------- pack.lock ----------
 
 def _rel(root: Path, d: Path) -> str:
+    """パックの所在を root からの相対パスで表す（情報用）。
+
+    絶対パス（ドライブ名・ユーザ名などローカルな情報）は決して残さない —
+    lock はコミット・配布される成果物であり、resolved_from は照合には使わない
+    （verify_lock は pack/version/content_hash のみ比較する）。相対化できない
+    （別ドライブ等）ときはパック名だけにフォールバックする。"""
+    root, d = root.resolve(), d.resolve()
     try:
-        return d.resolve().relative_to(root.resolve()).as_posix()
+        return d.relative_to(root).as_posix()
     except ValueError:
-        return d.resolve().as_posix()
+        pass
+    try:
+        return Path(os.path.relpath(d, root)).as_posix()
+    except ValueError:
+        return d.name
 
 
 def _hash_dir(d: Path) -> str:
@@ -595,7 +606,13 @@ def verify_lock(root: Path, packs: list[Pack], problems: list[Problem],
         return
     with open(lock, encoding="utf-8") as f:
         locked = yaml.safe_load(f) or {}
-    if locked.get("chain") != chain_lock(root, packs).get("chain"):
+    # 照合は移植可能な同一性（pack / 版 / 内容ハッシュ）だけで行う。resolved_from は
+    # 所在の情報にすぎず、レイアウト（開発リポ / 消費側の同梱パック）で変わるため
+    # 比較に含めない。含めると同じパックでも環境違いで frozen が誤検知する。
+    def _identity(chain):
+        return [{"pack": e.get("pack"), "resolved_version": e.get("resolved_version"),
+                 "content_hash": e.get("content_hash")} for e in (chain or [])]
+    if _identity(locked.get("chain")) != _identity(chain_lock(root, packs).get("chain")):
         problems.append(Problem("error" if frozen else "warn", "pack.lock",
                                 "STD-W003 pack.lock と解決結果が一致しない"
                                 "（specdb pack lock で更新）"))
