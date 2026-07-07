@@ -338,17 +338,23 @@ class Editor:
             f"関係 {rtype}:{src}->{dst} が relations/ に見つからない"
             "（アイテム内の埋め込み記述なら、そのアイテムの YAML を直接編集する）")
 
+    def _locate_ref(self, ref: str) -> tuple[Path, str, int, int, bool]:
+        """アイテム ID または関係参照 (``rtype:from->to``) からレコードを特定する。
+
+        set-status / approve と同じ参照文法を set-source でも受け付けるための共通口。
+        """
+        if re.match(r"^[\w-]+:.+->", ref):
+            rtype, rest = ref.split(":", 1)
+            src, dst = rest.split("->", 1)
+            return self._locate_relation(rtype, src.strip(), dst.strip())
+        return self._locate_item(ref)
+
     def set_status(self, ref: str, status: str, _via: str = "set-status") -> None:
         if status not in ("draft", "review", "approved", "deprecated"):
             raise MutateError(f"未知の status '{status}'")
         if status == "approved" and _via != "approve":
             raise MutateError("approved へは approve 操作でのみ上げられる（レビュー後）")
-        if re.match(r"^[\w-]+:.+->", ref):
-            rtype, rest = ref.split(":", 1)
-            src, dst = rest.split("->", 1)
-            path, text, s, e, is_list = self._locate_relation(rtype, src.strip(), dst.strip())
-        else:
-            path, text, s, e, is_list = self._locate_item(ref)
+        path, text, s, e, is_list = self._locate_ref(ref)
         new_block = _replace_status(text[s:e], status, is_list)
         self._write(path, text[:s] + new_block + text[e:])
         self.log.append(f"{_via} {ref} -> {status}")
@@ -363,12 +369,28 @@ class Editor:
                         + (" (status: review)" if to_review else ""))
 
     def set_source(self, iid: str, source, to_review: bool = True) -> None:
-        """出典を差し替える（文書の改稿で evidence が古くなったとき等）。"""
+        """出典を差し替える（文書の改稿で evidence が古くなったとき等）。
+
+        ``iid`` は関係参照 (``rtype:from->to``) も受け付ける — 関係の evidence も
+        文書の改稿で古くなるため、アイテムと同じ操作で差し替えられるようにする。
+        """
         if not source:
             raise MutateError("source（出典）は必須")
-        path, text, s, e, is_list = self._locate_item(iid)
+        path, text, s, e, is_list = self._locate_ref(iid)
         block = text[s:e]
         pad = "  " if is_list else ""
+        if block.lstrip().startswith("- {"):
+            # 1 行フロースタイルのレコード（関係でよく使う）に block 形式の source を
+            # そのまま差すと YAML が壊れる。先にブロック形式へ展開してから差す。
+            head, _, rest = block.partition("\n")
+            rec = yaml.safe_load(head)[0]
+            lines: list[str] = []
+            for k, v in rec.items():
+                body = _attr_lines(k, v, len(pad))
+                if not lines:
+                    body[0] = "- " + body[0].lstrip()
+                lines += body
+            block = "\n".join(lines) + "\n" + rest
         new_lines = "\n".join(_source_lines(source, len(pad)))
         pattern = re.compile(
             rf"(?m)^{re.escape(pad)}source:[^\n]*(\n{re.escape(pad)}[ ]+[^\n]*)*")

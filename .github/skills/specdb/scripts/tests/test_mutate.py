@@ -177,6 +177,20 @@ def test_set_source_replaces_source_block():
     assert item.attrs["description"] == "既存の説明文。"   # 他属性は無傷
 
 
+def test_set_source_accepts_relation_ref():
+    # 関係の evidence も文書改稿で古くなるため、set-status/approve と同じ
+    # 関係参照 (rtype:from->to) で出典を差し替えられる。
+    root = build_root()
+    Editor(root).set_source(
+        "realizes:sk-a->fn-base", {"doc": "docs/new.md", "evidence": "関係の新しい原文"}
+    )
+    store = Store.load(root)
+    assert not store.has_errors(), [str(p) for p in store.problems]
+    rel = store.relations_of("realizes")[0]
+    assert rel.source == [{"doc": "docs/new.md", "evidence": "関係の新しい原文"}]
+    assert rel.status == "review"
+
+
 def test_apply_plan_and_rollback_on_new_error():
     root = build_root()
     before = (root / "items/function/core.yaml").read_text(encoding="utf-8")
