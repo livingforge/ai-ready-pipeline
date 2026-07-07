@@ -171,6 +171,74 @@ def test_facts_evidence_trimmed_by_default(store, tmp_path, capsys):
     assert "evidence_truncated" not in full[0]
 
 
+def test_fact_add_refs_via_flag_and_json(store, tmp_path, capsys):
+    doc_id = _add_doc(store, tmp_path, "a.docx", ["hi"])
+    store("item-types", "add", "メソッド")
+    capsys.readouterr()
+    # --ref を繰り返し + |note、および --refs JSON を併用
+    store(
+        "fact-add", "--doc", doc_id, "--type", "メソッド", "--statement", "register()",
+        "--ref", "realizes=F-02", "--ref", "refines=SCR-03|画面遷移元",
+        "--refs", '[{"rel":"has-method","to_ref":"予約Service"}]',
+        "--json",
+    )
+    item = json.loads(capsys.readouterr().out.strip())
+    assert item["refs"] == [
+        {"rel": "has-method", "to_ref": "予約Service"},
+        {"rel": "realizes", "to_ref": "F-02"},
+        {"rel": "refines", "to_ref": "SCR-03", "note": "画面遷移元"},
+    ]
+    # refs は検索対象 (facts --text F-02 で拾える)
+    store("facts", "--text", "F-02", "--json")
+    assert len(json.loads(capsys.readouterr().out.strip())) == 1
+
+
+def test_fact_add_ref_bad_format_rejected(store, tmp_path, capsys):
+    doc_id = _add_doc(store, tmp_path, "a.docx", ["hi"])
+    store("item-types", "add", "メソッド")
+    capsys.readouterr()
+    # rel=to_ref 形式でない --ref は非0で拒否
+    rc = store(
+        "fact-add", "--doc", doc_id, "--type", "メソッド", "--statement", "s",
+        "--ref", "F-02",
+    )
+    assert rc != 0
+
+
+def test_rel_types_lists_defaults(store, capsys):
+    capsys.readouterr()
+    store("rel-types", "--json")
+    rels = json.loads(capsys.readouterr().out.strip())
+    assert "realizes" in rels and "refines" in rels
+
+
+def test_facts_merge_consolidates_shards(store, tmp_path, capsys):
+    doc_id = _add_doc(store, tmp_path, "a.docx", ["hi"])
+    store("item-types", "add", "機能要件")
+    # 2 つのシャードに並列抽出したていで書き分ける（--facts で保存先を分離）
+    shard_a = tmp_path / "facts.a.json"
+    shard_b = tmp_path / "facts.b.json"
+    common = store._common  # type: ignore[attr-defined]
+    it = common[common.index("--item-types-file") + 1]
+    rt_flag = ["--rel-types-file", str(tmp_path / "store" / "rel_types.json")]
+    cli.main(["fact-add", "--doc", doc_id, "--type", "機能要件", "--statement", "A",
+              "--ref", "realizes=F-01", "--facts", str(shard_a),
+              "--item-types-file", it, *rt_flag])
+    cli.main(["fact-add", "--doc", doc_id, "--type", "機能要件", "--statement", "B",
+              "--facts", str(shard_b), "--item-types-file", it, *rt_flag])
+    capsys.readouterr()
+    # 主ストアへ統合
+    rc = store("facts-merge", str(shard_a), str(shard_b), "--json")
+    assert rc == 0
+    result = json.loads(capsys.readouterr().out.strip())
+    assert result["added"] == 2
+    store("facts", "--json")
+    items = json.loads(capsys.readouterr().out.strip())
+    assert {it["id"] for it in items} == {"f0001", "f0002"}   # 振り直し済み
+    a = next(i for i in items if i["statement"] == "A")
+    assert a["refs"] == [{"rel": "realizes", "to_ref": "F-01"}]
+
+
 # ── ⑥ 数値ガード: --json 出力が上限を超えたら拒否し、絞り方を案内 ─────────
 def test_text_full_refused_over_ceiling(store, tmp_path, capsys):
     # 既定上限 (30,000 字) を超える文書の全文 (--max-chars 0) は拒否される。

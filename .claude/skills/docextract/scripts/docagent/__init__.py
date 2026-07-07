@@ -8,7 +8,7 @@ docextract が出力する ``result.json`` を取り込み、文書種別 (docty
 
 from __future__ import annotations
 
-from .facts import FactStore, default_item_types
+from .facts import FactStore, default_item_types, default_rel_types
 from .store import (
     DEFAULT_DOCTYPES,
     DEFAULT_STORE,
@@ -24,6 +24,7 @@ __all__ = [
     "DocAgentError",
     "default_doctypes",
     "default_item_types",
+    "default_rel_types",
     "DEFAULT_STORE",
     "DEFAULT_DOCTYPES",
     "PACKAGED_DOCTYPES",

@@ -130,16 +130,29 @@ def collect_history(data_root: Path, item_id: str | None = None,
         commits.append({"rev": full, "short": short, "date": date,
                         "author": author, "subject": subject})
 
+    def _store_at_or_none(rev: str):
+        """指定リビジョンの正本を読む。そのリビジョンに仕様データが無い
+        （プレフィックスが未追跡・削除済み等）なら None を返して当該コミットを
+        スキップできるようにする。store_at は CLI 用に sys.exit するため
+        SystemExit も拾う（履歴は「読めた版どうしの意味差分」なので、データの
+        無い版は履歴に載せず読み飛ばすのが正しい）。"""
+        try:
+            return store_at(rev, data_root)
+        except SystemExit:
+            return None
+
     base_store = None
     if limit is not None and len(commits) > limit:
         base = commits[-limit - 1]
         commits = commits[-limit:]
-        base_store = store_at(base["rev"], data_root)
+        base_store = _store_at_or_none(base["rev"])
 
     entries: list[dict] = []
     prev = base_store
     for c in commits:
-        cur = store_at(c["rev"], data_root)
+        cur = _store_at_or_none(c["rev"])
+        if cur is None:  # この版に仕様データが無い（未追跡・削除等）= 履歴に載せない
+            continue
         if prev is None:  # 履歴上の最初のコミット = 初版
             ch = {k: [] for k in ("items_added", "items_removed", "items_changed",
                                   "rels_added", "rels_removed", "rels_changed")}

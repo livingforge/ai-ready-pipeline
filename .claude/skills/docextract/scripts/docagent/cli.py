@@ -14,7 +14,9 @@
   横断検索 (doc-qa):
     search        本文を横断検索し出典 (doc_id + location) 付きで返す
   仕様の洗い出し (spec-extractor):
-    fact-add / facts / facts-pending / fact-remove / facts-stats / facts-export / item-types
+    fact-add / facts / facts-pending / fact-remove / facts-stats / facts-export
+    facts-merge   並列抽出したシャード facts.json を主ストアへ統合 (ID 振り直し)
+    item-types / rel-types   ファクト種別・参照 (refs) の関係種別を管理
 
 すべてのサブコマンドは ``--json`` で機械可読な JSON を出力する
 (エージェントはこれをパースして次の操作を決める)。``--store`` で保存先を変更できる。
@@ -49,7 +51,9 @@ def _load(args: argparse.Namespace) -> Library:
 
 
 def _load_facts(args: argparse.Namespace) -> FactStore:
-    return FactStore.load(args.facts, args.item_types_file)
+    return FactStore.load(
+        args.facts, args.item_types_file, getattr(args, "rel_types_file", None)
+    )
 
 
 # --json は「機械が読む」出力なので既定はコンパクト (整形空白でトークンを倍増させない)。
@@ -189,6 +193,7 @@ def cmd_init(args):
     fs = _load_facts(args)
     fs.save()
     fs.save_item_types()
+    fs.save_rel_types()
     # 数値ガードの既定値を config.json に敷く (既存は上書きせず利用者の編集を守る)。
     config_written = _config.write_defaults(args.config)
     _emit(
@@ -199,6 +204,7 @@ def cmd_init(args):
             "config_created": config_written,
             "doctypes": lib.doctypes,
             "item_types": fs.item_types,
+            "rel_types": fs.rel_types,
             "documents": len(lib.documents),
         },
         args.json,
@@ -208,6 +214,7 @@ def cmd_init(args):
             + ("" if o["config_created"] else " (既存を保持)")
             + f"\n  文書種別: {', '.join(o['doctypes'])}\n"
             f"  ファクト種別: {', '.join(o['item_types'])}\n"
+            f"  参照の関係種別: {', '.join(o['rel_types'])}\n"
             f"  登録済み文書: {o['documents']} 件"
         ),
     )
@@ -432,7 +439,16 @@ def cmd_search(args):
 def _fact_line(it: dict) -> str:
     conf = f" ({it['confidence']})" if it.get("confidence") else ""
     loc = json.dumps(it.get("location", {}), ensure_ascii=False)
-    return f"{it['id']} [{it.get('type','?')}]{conf} {it.get('doc_id','?')} {loc}\n    {it.get('statement','')}"
+    refs = it.get("refs") or []
+    ref_line = (
+        "\n    refs: " + ", ".join(f"{r['rel']}→{r['to_ref']}" for r in refs)
+        if refs
+        else ""
+    )
+    return (
+        f"{it['id']} [{it.get('type','?')}]{conf} {it.get('doc_id','?')} {loc}"
+        f"\n    {it.get('statement','')}{ref_line}"
+    )
 
 
 def cmd_fact_add(args):
@@ -445,6 +461,7 @@ def cmd_fact_add(args):
             raise DocAgentError(
                 f"--location は JSON で指定してください (例: '{{\"page\": 3}}'): {e}"
             ) from e
+    refs = _parse_refs(getattr(args, "ref", None), getattr(args, "refs", None))
     item = fs.add(
         doc_id=args.doc,
         type=args.type,
@@ -453,10 +470,18 @@ def cmd_fact_add(args):
         location=location,
         keywords=_split_keywords(args.keywords),
         confidence=args.confidence,
+        refs=refs,
         force=args.force,
     )
     fs.save()
-    _emit(item, args.json, lambda o: print(f"追加しました: {o['id']} [{o['type']}] <- {o['doc_id']}"))
+
+    def _added(o):
+        line = f"追加しました: {o['id']} [{o['type']}] <- {o['doc_id']}"
+        if o.get("refs"):
+            line += "  refs: " + ", ".join(f"{r['rel']}→{r['to_ref']}" for r in o["refs"])
+        print(line)
+
+    _emit(item, args.json, _added)
 
 
 # 一覧での evidence (原文抜粋) の既定表示上限。原文はファクト件数ぶん積み上がるため
@@ -536,6 +561,20 @@ def cmd_facts_stats(args):
     _emit(s, args.json, human)
 
 
+def cmd_facts_merge(args):
+    fs = _load_facts(args)
+    result = fs.merge(args.shards)
+    fs.save()
+    _emit(
+        result,
+        args.json,
+        lambda o: print(
+            f"統合しました: 追加 {o['added']} 件 / 重複スキップ {o['skipped']} 件 / "
+            f"種別 +{o['item_types_added']} / 関係種別 +{o['rel_types_added']} / 合計 {o['total']} 件"
+        ),
+    )
+
+
 def cmd_facts_export(args):
     fs = _load_facts(args)
     data = fs.export()
@@ -561,6 +600,23 @@ def cmd_item_types(args):
     )
 
 
+def cmd_rel_types(args):
+    fs = _load_facts(args)
+    if args.action == "add" and args.name:
+        fs.add_rel_type(args.name)
+        fs.save_rel_types()
+        fs.save()
+    elif args.action == "remove" and args.name:
+        fs.remove_rel_type(args.name)
+        fs.save_rel_types()
+        fs.save()
+    _emit(
+        fs.rel_types,
+        args.json,
+        lambda o: print("参照 (refs) の関係種別:\n" + "\n".join(f"  - {c}" for c in o)),
+    )
+
+
 # ── 補助 ─────────────────────────────────────────────────────
 # キーワードの区切り揺れ (半角/全角カンマ・読点・セミコロン・改行) を吸収する。
 _KEYWORD_DELIMS = re.compile(r"[,、，;；\n\r\t]+")
@@ -582,6 +638,42 @@ def _split_keywords(value: str | None) -> list[str] | None:
             seen.add(k)
             out.append(k)
     return out
+
+
+def _parse_refs(ref_args: list[str] | None, refs_json: str | None) -> list[dict] | None:
+    """``--ref`` (繰り返し) と ``--refs`` (JSON 配列) を参照リストへまとめる。
+
+    ``--ref`` は ``rel=to_ref`` 形式 (最初の ``=`` で分割。``rel:to_ref`` も可)。
+    ``rel=to_ref|note`` のように末尾に ``|note`` を付けて備考を添えられる。複雑な
+    参照 (note を含む多数) は ``--refs '[{"rel":...,"to_ref":...,"note":...}]'`` で
+    まとめて渡せる。検証・正規化は FactStore 側が行う。"""
+    refs: list[dict] = []
+    if refs_json:
+        try:
+            data = json.loads(refs_json)
+        except json.JSONDecodeError as e:
+            raise DocAgentError(
+                "--refs は JSON 配列で指定してください"
+                ' (例: \'[{"rel":"realizes","to_ref":"F-02"}]\'): ' + str(e)
+            ) from e
+        if not isinstance(data, list):
+            raise DocAgentError("--refs は参照オブジェクトの JSON 配列です。")
+        refs.extend(data)
+    for raw in ref_args or []:
+        sep = "=" if "=" in raw else (":" if ":" in raw else None)
+        if not sep:
+            raise DocAgentError(
+                f"--ref は 'rel=to_ref' 形式で指定してください (例: realizes=F-02): {raw!r}"
+            )
+        rel, to_ref = raw.split(sep, 1)
+        note = None
+        if "|" in to_ref:
+            to_ref, note = to_ref.split("|", 1)
+        ref = {"rel": rel.strip(), "to_ref": to_ref.strip()}
+        if note and note.strip():
+            ref["note"] = note.strip()
+        refs.append(ref)
+    return refs or None
 
 
 def _resolve_target(lib: Library, target: str) -> tuple[str, bool]:
@@ -643,6 +735,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     common.add_argument(
         "--item-types-file", default=argparse.SUPPRESS, help="ファクト種別の定義ファイル"
+    )
+    common.add_argument(
+        "--rel-types-file", default=argparse.SUPPRESS, help="ファクト参照 (refs) の関係種別の定義ファイル"
     )
     common.add_argument(
         "--config",
@@ -803,7 +898,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--location", help='要素の location を JSON で (例: \'{"page": 3}\')')
     sp.add_argument("--keywords", help="カンマ区切りのキーワード")
     sp.add_argument("--confidence", choices=["high", "medium", "low"], help="確信度")
-    sp.add_argument("--force", action="store_true", help="種別定義外でも許可")
+    sp.add_argument(
+        "--ref",
+        action="append",
+        metavar="REL=TO_REF",
+        help="このファクトから別アイテムへの参照 (工程間トレース)。'rel=to_ref' 形式で"
+        " 繰り返し指定可 (例: --ref realizes=F-02 --ref refines=SCR-03)。to_ref は資料上の"
+        " 自然キー (F-02/SCR-03/物理名)。末尾に |備考 を付けられる。rel は rel-types のいずれか",
+    )
+    sp.add_argument(
+        "--refs",
+        help='参照を JSON 配列でまとめて指定 (note を含む複雑な参照向け。'
+        ' 例: \'[{"rel":"constrains","to_ref":"顧客コード","note":"8桁必須"}]\')',
+    )
+    sp.add_argument("--force", action="store_true", help="種別・関係種別定義外でも許可")
     sp.set_defaults(func=cmd_fact_add)
 
     sp = add("facts", "ファクトを一覧/絞り込み")
@@ -832,6 +940,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("id")
     sp.set_defaults(func=cmd_fact_remove)
 
+    sp = add("facts-merge",
+             "並列抽出したシャード facts.json を主ストアへ統合 (ID 振り直し・語彙は和集合)")
+    sp.add_argument("shards", nargs="+",
+                    help="統合するシャード facts.json のパス (複数可。glob 展開はシェルに任せる)")
+    sp.set_defaults(func=cmd_facts_merge)
+
     add("facts-stats", "ファクトの種別別・文書別の集計").set_defaults(func=cmd_facts_stats)
 
     sp = add("facts-export", "ファクト集約 JSON 全体を出力")
@@ -843,6 +957,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove"])
     sp.add_argument("name", nargs="?")
     sp.set_defaults(func=cmd_item_types)
+
+    sp = add("rel-types", "ファクト参照 (refs) の関係種別の表示・追加・削除")
+    sp.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove"])
+    sp.add_argument("name", nargs="?")
+    sp.set_defaults(func=cmd_rel_types)
 
     return p
 
@@ -863,6 +982,7 @@ def main(argv: list[str] | None = None) -> int:
     args.doctypes = getattr(args, "doctypes", str(_paths.doctypes_path()))
     args.facts = getattr(args, "facts", str(_paths.facts_path()))
     args.item_types_file = getattr(args, "item_types_file", str(_paths.item_types_path()))
+    args.rel_types_file = getattr(args, "rel_types_file", str(_paths.rel_types_path()))
     args.config = getattr(args, "config", str(_paths.config_path()))
     args.stdout = getattr(args, "stdout", False)
     args.json = getattr(args, "json", False)

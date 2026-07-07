@@ -1,0 +1,11 @@
+{
+  "rel_types": [
+    "realizes",
+    "refines",
+    "constrains",
+    "interfaces",
+    "has-method",
+    "has-column",
+    "displays"
+  ]
+}

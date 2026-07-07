@@ -16,7 +16,7 @@ tools: Bash, Read, Grep
 
 ### 許可コマンド（最小権限。これ以外は実行しない）
 実行してよいのは次の読み取り系サブコマンドだけ。抽出・保存・任意のシェル操作はしない
-（`runCommands`/`Bash` の用途をここに限定する）。抽出そのものが要るなら @doc-indexer に引き継ぐ。
+（`execute/runInTerminal`/`Bash` の用途をここに限定する）。抽出そのものが要るなら @doc-indexer に引き継ぐ。
 - `docextract docagent {search|get|text|facts} ...`
 - `Read` / `Grep`（生成物の確認のみ）
 

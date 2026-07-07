@@ -19,7 +19,7 @@ PowerPoint/PDF）の集まりを一括で抽出し、後工程（仕様の洗い
 
 ### 許可コマンド（最小権限。これ以外は実行しない）
 このエージェントが実行してよいのは次の固定サブコマンド群だけ。任意のシェル操作・
-ファイル改変・ネットワークコマンドは実行しない（`runCommands`/`Bash` は付与されているが
+ファイル改変・ネットワークコマンドは実行しない（`execute/runInTerminal`/`Bash` は付与されているが
 用途をここに限定する）。
 - `docextract extract --dir <フォルダ> [-r] [-o <出力先>] --quiet --json-summary`
 - `docextract docagent {init|sync|doctypes|list|stats|set-doctype|text} ...`

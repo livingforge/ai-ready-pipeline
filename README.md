@@ -124,14 +124,16 @@ print(data["summary"])   # 例: {'text': 12, 'table': 3, 'image': 2}
 利用者 ──▶ doc-indexer ──┤   フォルダ一括抽出 → 索引化＋文書種別の付与（現状把握）
           （現状把握）    └─ docagent（データ操作API）… 集約 JSON（.docextract/store/）
              │
-             ├──▶ spec-extractor（仕様の洗い出し）… 文書 → 出典付きファクト（facts.json）
+             ├──▶ spec-batch（並列オーケストレータ）… 文書ごとに spec-extractor を fan-out → facts-merge
+             │        └──▶ spec-extractor（仕様の洗い出し）… 文書 → 出典付きファクト（facts.json）
              └──▶ doc-qa（横断 QA）… 質問 → 出典付き回答（search / facts で接地）
 ```
 
 | エージェント | 役割（工程） | 使いどころ |
 |------------|------|-----------|
 | **doc-indexer** | フォルダを一括抽出し衝突しない ID で索引化。各資料に**文書種別**を付与、内容重複も把握（要約はしない） | 「資料を取り込んで索引化して」 |
-| **spec-extractor** | 文書から機能要件・データ項目・画面/帳票・非機能要件等を**出典付きファクト**に項目化 | 個別/バッチの仕様洗い出し、並列処理 |
+| **spec-extractor** | 文書から機能要件・データ項目・画面/帳票・非機能要件等を**出典付きファクト**に項目化 | 個別の仕様洗い出し |
+| **spec-batch** | 複数文書の仕様抽出を**文書ごとに spec-extractor を並列起動**し、シャードを `facts-merge` で統合（共有ストア競合を回避） | 「全文書をまとめて/並列で洗い出して」 |
 | **doc-qa** | 抽出済み資料を横断検索し**必ず出典付きで**問いに答える（無ければ「該当なし」） | 「既存仕様では〜はどうなっている？」 |
 
 Claude Code 上で `@doc-indexer` に「この資料を取り込んで索引化して」と頼めば、抽出から
@@ -167,7 +169,7 @@ src/skills/docextract/  または  src/agents/<エージェント名>/
 ├── body.md                    # 両プラットフォーム共通の本文
 ├── frontmatter.common.yaml    # name / description など共通フロントマター
 ├── frontmatter.claude.yaml    # .claude 固有 (例: tools: Bash, Read)
-└── frontmatter.github.yaml    # .github 固有 (例: tools: ['runCommands', 'search'])
+└── frontmatter.github.yaml    # .github 固有 (例: tools: ['execute/runInTerminal', 'execute/getTerminalOutput', 'search'])
 ```
 
 共通部分は common / body を1箇所直せば両方に反映され、プラットフォーム固有の

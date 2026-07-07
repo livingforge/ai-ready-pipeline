@@ -15,7 +15,13 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from docagent import FactStore, Library, DocAgentError, default_item_types
+from docagent import (
+    FactStore,
+    Library,
+    DocAgentError,
+    default_item_types,
+    default_rel_types,
+)
 
 ITEM_TYPES = default_item_types()
 
@@ -97,7 +103,7 @@ class FactStoreTest(unittest.TestCase):
         fs.remove("f0001")
         self.assertEqual(len(fs.items), 1)
         data = fs.export()
-        self.assertEqual(set(data), {"version", "item_types", "items"})
+        self.assertEqual(set(data), {"version", "item_types", "rel_types", "items"})
         with self.assertRaises(DocAgentError):
             fs.remove("f0999")  # 不明な ID
 
@@ -114,6 +120,131 @@ class FactStoreTest(unittest.TestCase):
     def test_default_item_types_from_packaged_json(self):
         self.assertIn("機能要件", ITEM_TYPES)
         self.assertIn("用語", ITEM_TYPES)
+
+    # ── refs (ファクト間参照 / 工程間トレース) ──────────────────
+    def test_refs_added_validated_and_persisted(self):
+        fs = self._fs()
+        item = fs.add(
+            "doc_a", "メソッド", "register()は予約を登録する",
+            refs=[
+                {"rel": "realizes", "to_ref": "F-02"},
+                {"rel": "refines", "to_ref": "SCR-03", "note": "画面遷移元"},
+            ],
+        )
+        self.assertEqual(
+            item["refs"],
+            [
+                {"rel": "realizes", "to_ref": "F-02"},
+                {"rel": "refines", "to_ref": "SCR-03", "note": "画面遷移元"},
+            ],
+        )
+        fs.save()
+        # 再読込しても refs が残る
+        reloaded = self._fs()
+        self.assertEqual(reloaded.items[0]["refs"], item["refs"])
+
+    def test_refs_default_empty_list(self):
+        fs = self._fs()
+        item = fs.add("d", "機能要件", "本文")
+        self.assertEqual(item["refs"], [])
+
+    def test_ref_rel_normalized_and_unknown_rejected(self):
+        fs = self._fs()
+        # 表記揺れ (前後空白) は関係種別タクソノミーへ寄せる
+        item = fs.add("d", "メソッド", "本文", refs=[{"rel": " realizes ", "to_ref": "F-1"}])
+        self.assertEqual(item["refs"][0]["rel"], "realizes")
+        # 未知の関係種別は拒否
+        with self.assertRaises(DocAgentError):
+            fs.add("d", "メソッド", "本文", refs=[{"rel": "bogus", "to_ref": "F-1"}])
+        # force なら任意の関係種別を許可
+        forced = fs.add("d", "メソッド", "本文", refs=[{"rel": "画面遷移", "to_ref": "SCR-9"}], force=True)
+        self.assertEqual(forced["refs"][0]["rel"], "画面遷移")
+
+    def test_ref_requires_rel_and_to_ref(self):
+        fs = self._fs()
+        with self.assertRaises(DocAgentError):
+            fs.add("d", "メソッド", "本文", refs=[{"rel": "realizes"}])  # to_ref 欠落
+        with self.assertRaises(DocAgentError):
+            fs.add("d", "メソッド", "本文", refs=[{"to_ref": "F-1"}])  # rel 欠落
+
+    def test_refs_are_searchable(self):
+        fs = self._fs()
+        fs.add("d", "メソッド", "処理", refs=[{"rel": "realizes", "to_ref": "F-42"}])
+        self.assertEqual(len(fs.query(text="F-42")), 1)
+
+    def test_rel_types_editable_and_file_wins(self):
+        rel_types = self.root / "store" / "rel_types.json"
+        rel_types.parent.mkdir(parents=True, exist_ok=True)
+        rel_types.write_text(json.dumps({"rel_types": ["links"]}), encoding="utf-8")
+        fs = FactStore.load(self.facts, self.item_types, rel_types)
+        self.assertEqual(fs.rel_types, ["links"])
+        fs.add("d", "機能要件", "本文", refs=[{"rel": "links", "to_ref": "X"}])  # 定義内は通る
+        with self.assertRaises(DocAgentError):
+            fs.add("d", "機能要件", "本文", refs=[{"rel": "realizes", "to_ref": "X"}])
+
+    def test_default_rel_types_from_packaged_json(self):
+        self.assertIn("realizes", default_rel_types())
+        self.assertIn("refines", default_rel_types())
+
+    # ── merge (並列シャードの統合) ─────────────────────────────
+    def _shard(self, name: str) -> FactStore:
+        return FactStore.load(self.root / "shards" / f"{name}.json")
+
+    def test_merge_renumbers_ids_and_preserves_fields(self):
+        a = self._shard("a")
+        a.add("doc1", "機能要件", "CSV出力できる")
+        a.add("doc1", "メソッド", "register()", refs=[{"rel": "realizes", "to_ref": "F-01"}])
+        a.save()
+        b = self._shard("b")
+        b.add("doc2", "データ項目", "顧客コードは8桁")
+        b.save()
+
+        fs = self._fs()
+        result = fs.merge([a.path, b.path])
+        fs.save()
+        self.assertEqual(result["added"], 3)
+        self.assertEqual(result["skipped"], 0)
+        # ID は取り込み側で連番に振り直される（シャードの f0001 衝突を解消）
+        self.assertEqual([it["id"] for it in fs.items], ["f0001", "f0002", "f0003"])
+        # refs はそのまま保持
+        method = next(it for it in fs.items if it["type"] == "メソッド")
+        self.assertEqual(method["refs"], [{"rel": "realizes", "to_ref": "F-01"}])
+
+    def test_merge_skips_exact_duplicates(self):
+        a = self._shard("a")
+        a.add("doc1", "機能要件", "同一の事実")
+        a.save()
+        b = self._shard("b")
+        b.add("doc1", "機能要件", "同一の事実")  # doc+type+statement 一致
+        b.add("doc2", "機能要件", "別の事実")
+        b.save()
+
+        fs = self._fs()
+        r1 = fs.merge([a.path])
+        r2 = fs.merge([b.path])   # 再取り込みでも重複は増えない（冪等）
+        self.assertEqual(r1["added"], 1)
+        self.assertEqual(r2["added"], 1)      # 別の事実だけ増える
+        self.assertEqual(r2["skipped"], 1)    # 同一の事実はスキップ
+        self.assertEqual(len(fs.items), 2)
+
+    def test_merge_unions_vocabularies(self):
+        a = self._shard("a")
+        a.add_item_type("独自種別")
+        a.add_rel_type("独自関係")
+        a.add("doc1", "独自種別", "x", refs=[{"rel": "独自関係", "to_ref": "Y"}], force=True)
+        a.save()
+
+        fs = self._fs()
+        result = fs.merge([a.path])
+        self.assertGreaterEqual(result["item_types_added"], 1)
+        self.assertGreaterEqual(result["rel_types_added"], 1)
+        self.assertIn("独自種別", fs.item_types)
+        self.assertIn("独自関係", fs.rel_types)
+
+    def test_merge_missing_shard_raises(self):
+        fs = self._fs()
+        with self.assertRaises(DocAgentError):
+            fs.merge([self.root / "shards" / "nope.json"])
 
 
 class SyncTest(unittest.TestCase):

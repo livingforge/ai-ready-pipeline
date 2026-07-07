@@ -90,3 +90,8 @@ def facts_path() -> Path:
 def item_types_path() -> Path:
     """ファクトの種別定義ファイル (``<home>/store/item_types.json``)。"""
     return store_dir() / "item_types.json"
+
+
+def rel_types_path() -> Path:
+    """ファクト間参照 (refs) の関係種別定義ファイル (``<home>/store/rel_types.json``)。"""
+    return store_dir() / "rel_types.json"
