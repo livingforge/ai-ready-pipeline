@@ -19,12 +19,15 @@
     item-types / rel-types   ファクト種別・参照 (refs) の関係種別を管理
   ブロック抽出プロトコル (spec-batch が set/check、spec-extractor が get/send):
     context-set     文書群をブロック作業キューへ確定 (シート/ページ単位で結合・分割)
-    context-get     担当ブロックの本文+語彙を払い出す (pending→claimed)
+    context-get     次の未処理ブロックの本文+語彙をアトミックに払い出す (ID 自動割り当て)
     context-send    抽出結果 [{type, statement, refs?}] をシャードへ保存 (→done)
     context-check   done でないブロックを列挙 (facts-merge 前のバリア)
 
 すべてのサブコマンドは ``--json`` で機械可読な JSON を出力する
 (エージェントはこれをパースして次の操作を決める)。``--store`` で保存先を変更できる。
+例外はブロック抽出プロトコル (context-get/send/check): **既定出力が機械可読**の
+軽量エージェント形式 (メタ行 + 生テキスト。JSON のキー引用符・エスケープの冗長を
+避ける) なので ``--json`` を付けずに使う。JSON が要るツール/テストだけ ``--json``。
 """
 
 from __future__ import annotations
@@ -443,7 +446,6 @@ def cmd_search(args):
 
 # ── 仕様の洗い出し (spec-extractor): ファクト操作 ────────────────
 def _fact_line(it: dict) -> str:
-    conf = f" ({it['confidence']})" if it.get("confidence") else ""
     loc = json.dumps(it.get("location", {}), ensure_ascii=False)
     refs = it.get("refs") or []
     ref_line = (
@@ -452,7 +454,7 @@ def _fact_line(it: dict) -> str:
         else ""
     )
     return (
-        f"{it['id']} [{it.get('type','?')}]{conf} {it.get('doc_id','?')} {loc}"
+        f"{it['id']} [{it.get('type','?')}] {it.get('doc_id','?')} {loc}"
         f"\n    {it.get('statement','')}{ref_line}"
     )
 
@@ -474,8 +476,6 @@ def cmd_fact_add(args):
         statement=args.statement,
         evidence=args.evidence,
         location=location,
-        keywords=_split_keywords(args.keywords),
-        confidence=args.confidence,
         refs=refs,
         force=args.force,
     )
@@ -624,6 +624,18 @@ def cmd_rel_types(args):
 
 
 # ── ブロック抽出プロトコル (context-set / get / send / check) ──
+# get/send/check の既定出力は「メタ行 + 生テキスト」の軽量エージェント形式。
+# JSON はキー引用符・括弧・改行エスケープ (\n=2字) のぶん冗長で、サブエージェントの
+# コンテキストを本文サイズ以上に膨らませる。既定を機械可読な軽量形式にすることで
+# プロンプトから --json 指定を消し、付け忘れという故障モードも無くす
+# (--json はツール/テストが構造化データを要るときの明示オプションとして残す)。
+def _print_guarded(s: str, hint: str | None = None) -> None:
+    """エージェント形式 (既定出力) にも --json と同じ数値ガードを適用する。"""
+    if _CEILING and not _FORCE_STDOUT and len(s) > _CEILING:
+        _refuse_oversize(len(s), hint)
+    print(s)
+
+
 def cmd_context_set(args):
     lib = _load(args)
     docs = resolve_docs(lib, files=args.files, folder=args.folder, doc_ids=args.docs)
@@ -656,29 +668,40 @@ def cmd_context_get(args):
     queue = ContextQueue.load(args.context)
     block = queue.get(args.id)
     fs = _load_facts(args)  # 語彙 (item_types/rel_types) を同梱して追加コールを不要に
-    remaining = sum(1 for b in queue.blocks if b["status"] == "pending")
-    payload = {
-        "id": block["id"],
-        "doc_id": block["doc_id"],
-        "source": block["source"],
-        "units": block["units"],
-        "location": block["location"],
-        "chars": block["chars"],
-        "text": block["text"],
-        "item_types": fs.item_types,
-        "rel_types": fs.rel_types,
-        "remaining_pending": remaining,
-    }
-
-    def human(o):
-        print(f"ブロック {o['id']} ({o['source']} / {', '.join(o['units'])} / {o['chars']}字)")
-        print(o["text"])
-
-    _emit(
-        payload,
-        args.json,
-        human,
-        hint="ブロックが大きすぎます。context-set --max-chars を下げて作り直すか --stdout",
+    hint = "ブロックが大きすぎます。context-set --max-chars を下げて作り直すか --stdout"
+    if args.json:
+        remaining = sum(
+            1 for b in queue.blocks if queue.status_of(b["id"]) == "pending"
+        )
+        payload = {
+            "id": block["id"],
+            "doc_id": block["doc_id"],
+            "source": block["source"],
+            "units": block["units"],
+            "location": block["location"],
+            "chars": block["chars"],
+            "text": block["text"],
+            "item_types": fs.item_types,
+            "rel_types": fs.rel_types,
+            "remaining_pending": remaining,
+        }
+        _emit(payload, True, lambda o: None, hint=hint)
+        return
+    # 既定: エージェント形式。抽出に要るものだけを出す — id (send で使う)・
+    # 文脈 (source/units)・語彙・生の本文。location は server-side 付与なので
+    # エージェントに渡さない。本文はエスケープ無しの生テキスト。
+    _print_guarded(
+        "\n".join(
+            [
+                f"id: {block['id']}",
+                f"source: {block['source']} | {', '.join(block['units'])}",
+                "types: " + ", ".join(fs.item_types),
+                "rels: " + ", ".join(fs.rel_types),
+                f"--- 本文 ({block['chars']}字) ---",
+                block["text"],
+            ]
+        ),
+        hint,
     )
 
 
@@ -701,59 +724,49 @@ def cmd_context_send(args):
     result = queue.send(
         args.id, items, args.item_types_file, args.rel_types_file
     )
-
-    def human(o):
-        by = ", ".join(f"{k}={v}" for k, v in o["by_type"].items())
-        print(f"保存しました: {o['id']} -> {o['shard']} (追加 {o['added']} 件: {by})")
-        for r in o["rejected"]:
-            print(f"  拒否 [{r['index']}]: {r['reason']}")
-
-    _emit(result, args.json, human)
+    if args.json:
+        _emit(result, True, lambda o: None)
+        return
+    # 既定: エージェント形式。報告に要る要約だけ (シャードパスは --json で)。
+    by = ", ".join(f"{k}={v}" for k, v in result["by_type"].items())
+    lines = [
+        f"id: {result['id']}",
+        f"added: {result['added']}" + (f" ({by})" if by else ""),
+    ]
+    if result["rejected"]:
+        lines.append(f"rejected: {len(result['rejected'])}")
+        lines += [f"  [{r['index']}] {r['reason']}" for r in result["rejected"]]
+    _print_guarded("\n".join(lines))
 
 
 def cmd_context_check(args):
     queue = ContextQueue.load(args.context)
     state = queue.check()
-
-    def human(o):
-        st = o["by_status"]
-        print(
-            f"ブロック {o['total']} 件: done={st.get('done', 0)}"
-            f" claimed={st.get('claimed', 0)} pending={st.get('pending', 0)}"
-        )
-        for i in o["incomplete"]:
-            print(f"  未完: {i['id']} ({i['status']}) {', '.join(i['units'])}")
-        if o["complete"]:
-            print("すべて処理済み。次: facts-merge " + " ".join(o["shards"]))
-
-    _emit(state, args.json, human)
+    if args.json:
+        _emit(state, True, lambda o: None)
+    else:
+        # 既定: エージェント形式。バリア判定と、統合・引き継ぎに要る一覧だけ。
+        st = state["by_status"]
+        lines = [
+            f"blocks: {state['total']} (done={st.get('done', 0)},"
+            f" claimed={st.get('claimed', 0)}, pending={st.get('pending', 0)})",
+            f"complete: {'true' if state['complete'] else 'false'}",
+        ]
+        if state["incomplete"]:
+            lines.append("incomplete:")
+            lines += [
+                f"  {i['id']} ({i['status']}) {', '.join(i['units'])}"
+                for i in state["incomplete"]
+            ]
+        if state["shards"]:
+            lines.append("shards:")
+            lines += [f"  {s}" for s in state["shards"]]
+        _print_guarded("\n".join(lines))
     # オーケストレータがバリアとして使えるよう、未完があれば非ゼロで返す。
     return 0 if state["complete"] else 3
 
 
 # ── 補助 ─────────────────────────────────────────────────────
-# キーワードの区切り揺れ (半角/全角カンマ・読点・セミコロン・改行) を吸収する。
-_KEYWORD_DELIMS = re.compile(r"[,、，;；\n\r\t]+")
-
-
-def _split_keywords(value: str | None) -> list[str] | None:
-    """カンマ区切り想定の文字列を、区切り揺れを吸収しつつ語のリストへ。
-
-    LLM は ``a、b`` ``a; b`` のように区切りを揺らすことがある。複数の区切りで
-    分割し、前後空白除去・重複除去 (出現順維持) する。
-    """
-    if value is None:
-        return None
-    out: list[str] = []
-    seen: set[str] = set()
-    for k in _KEYWORD_DELIMS.split(value):
-        k = k.strip()
-        if k and k not in seen:
-            seen.add(k)
-            out.append(k)
-    return out
-
-
 def _parse_refs(ref_args: list[str] | None, refs_json: str | None) -> list[dict] | None:
     """``--ref`` (繰り返し) と ``--refs`` (JSON 配列) を参照リストへまとめる。
 
@@ -1015,8 +1028,6 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--statement", required=True, help="抽出した事実 (機械可読な1文)")
     sp.add_argument("--evidence", help="根拠となる原文抜粋")
     sp.add_argument("--location", help='要素の location を JSON で (例: \'{"page": 3}\')')
-    sp.add_argument("--keywords", help="カンマ区切りのキーワード")
-    sp.add_argument("--confidence", choices=["high", "medium", "low"], help="確信度")
     sp.add_argument(
         "--ref",
         action="append",
@@ -1100,11 +1111,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.set_defaults(func=cmd_context_set)
 
-    sp = add("context-get", "担当ブロックの本文+語彙を払い出す (サブエージェント用)")
+    sp = add("context-get", "次の未処理ブロックの本文+語彙を払い出す (サブエージェント用)")
     sp.add_argument(
         "--id",
-        help="ブロック ID (オーケストレータが割り当てた担当分)。省略時は次の pending"
-        " を pop する (直列・単独実行専用。並列では必ず --id を指定)",
+        help="復旧・再実行用のブロック ID 明示。通常は省略 — 次の pending を"
+        " アトミッククレームで獲得する (並列に呼んでも二重払い出ししない)",
     )
     sp.set_defaults(func=cmd_context_get)
 
@@ -1115,7 +1126,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="抽出項目の JSON 配列。インライン / @ファイル / '-'=stdin。"
         ' 各項目: {"type":"種別","statement":"1文","refs":[{"rel":"realizes",'
-        '"to_ref":"F-02"}],"keywords":["語"],"confidence":"high"} (refs 以降は任意)',
+        '"to_ref":"F-02"}]} (refs は任意)',
     )
     sp.set_defaults(func=cmd_context_send)
 

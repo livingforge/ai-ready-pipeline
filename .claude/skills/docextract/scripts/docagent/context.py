@@ -17,23 +17,29 @@
 - **context-check** (オーケストレータ): done でないブロックを列挙する。``facts-merge``
   前のバリア (ID が揃っているかの確認) に使う。
 
-払い出しは**オーケストレータ割り当て型** (``--id`` 明示) を基本とする。キューを
-自己サーブで pop する形は「次の未処理」自体が共有可変状態になり、並列時に同じ
-ブロックを二重払い出ししうるため、引数なしの pop は**直列・単独実行専用**の糖衣。
-状態は 3 値 ``{pending, claimed, done}`` で、claimed のまま残ったブロックは
-context-check が未完として報告し、オーケストレータが再割り当てする
+払い出しは**自己サーブ型**: サブエージェントは引数なしの ``context-get`` を呼ぶだけで
+次の未処理ブロックを受け取れる (オーケストレータがブロック ID を配る必要はない)。
+並列時の二重払い出しは**アトミッククレーム**で防ぐ — ``claims/<block_id>.claim`` を
+``O_CREAT|O_EXCL`` (全 OS でアトミックな排他作成) で作成できた 1 プロセスだけが
+そのブロックを獲得し、負けた側は次の pending を試す。状態は 3 値
+``{pending, claimed, done}`` だが **context.json には保存しない** — シャードの有無
+(=done)・claim ファイルの有無 (=claimed) から毎回導出する。これにより context.json は
+context-set 以降イミュータブルになり、並列プロセスが共有 JSON を read-modify-write
+する競合そのものが存在しない。claimed のまま残ったブロック (クラッシュ等) は
+context-check が未完として報告し、``context-get --id`` で引き継げる
 (context-send はシャードを作り直すため再実行は冪等)。
 """
 
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .facts import CONFIDENCE_LEVELS, FactStore
+from .facts import FactStore
 from .store import DocAgentError, Library, _load_result_json, render_elements
 
 SCHEMA_VERSION = 1
@@ -164,7 +170,6 @@ def build_blocks(
                 "units": [_unit_label(k, v) for k, v in b["units"]],
                 "location": _block_location(b["units"], b["part"]),
                 "chars": len(b["text"]),
-                "status": "pending",
                 "text": b["text"],
             }
         )
@@ -178,6 +183,11 @@ class ContextQueue:
 
     本文テキストはキュー構築時のスナップショットとして各ブロックに保持する
     (result.json が走行中に差し替わっても get の内容が揺れない)。
+
+    context.json は **context-set が書いたら以降イミュータブル**。進捗は
+    claim ファイル (``claims/<block_id>.claim``) とシャード
+    (``shards/facts.<block_id>.json``) の有無から導出するため、並列の get/send が
+    共有 JSON を書き換える競合は構造的に起きない。
     """
 
     path: Path
@@ -231,18 +241,50 @@ class ContextQueue:
     def shard_path(self, block_id: str) -> Path:
         return self.path.parent / "shards" / f"facts.{block_id}.json"
 
+    def claim_path(self, block_id: str) -> Path:
+        return self.path.parent / "claims" / f"{block_id}.claim"
+
+    def status_of(self, block_id: str) -> str:
+        """ブロックの状態をファイルシステムから導出する (context.json は見ない)。
+
+        シャードあり=done / claim あり=claimed / どちらも無し=pending。
+        """
+        if self.shard_path(block_id).exists():
+            return "done"
+        if self.claim_path(block_id).exists():
+            return "claimed"
+        return "pending"
+
+    def _try_claim(self, block_id: str) -> bool:
+        """クレームをアトミックに取得する (取れたら True)。
+
+        ``O_CREAT|O_EXCL`` の排他作成は全 OS でアトミック。並列の context-get が
+        同じブロックを見ても、claim ファイルを先に作れた 1 プロセスだけが獲得する。
+        """
+        self.claim_path(block_id).parent.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(
+                self.claim_path(block_id), os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            )
+        except FileExistsError:
+            return False
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(_now() + "\n")
+        return True
+
     def check(self) -> dict[str, Any]:
         """done でないブロックを列挙する (facts-merge 前のバリア)。"""
         by_status = {s: 0 for s in _STATUSES}
         incomplete = []
         shards = []
         for b in self.blocks:
-            by_status[b["status"]] = by_status.get(b["status"], 0) + 1
-            if b["status"] == "done":
+            status = self.status_of(b["id"])
+            by_status[status] = by_status.get(status, 0) + 1
+            if status == "done":
                 shards.append(str(self.shard_path(b["id"])).replace("\\", "/"))
             else:
                 incomplete.append(
-                    {"id": b["id"], "status": b["status"], "units": b["units"]}
+                    {"id": b["id"], "status": status, "units": b["units"]}
                 )
         return {
             "total": len(self.blocks),
@@ -297,41 +339,51 @@ class ContextQueue:
                 "コンテキストにできるブロックが 0 件です (対象文書が無いか、"
                 "本文が空です)。対象の指定 (--files/--folder/--docs) を見直してください"
             )
+        # 進捗はファイルの有無で導出するため、作り直し時は前回の痕跡を消して
+        # 全ブロックを pending に戻す (残った claim/シャードが done に見えないように)。
+        claims_dir = path.parent / "claims"
+        if claims_dir.exists():
+            for f in claims_dir.glob("*.claim"):
+                f.unlink()
+        for b in queue.blocks:
+            shard = queue.shard_path(b["id"])
+            if shard.exists():
+                shard.unlink()
         queue.save()
         return queue, skipped
 
     def get(self, block_id: str | None = None) -> dict[str, Any]:
         """ブロックを 1 件払い出す (pending → claimed)。
 
-        ``block_id`` 明示 (オーケストレータ割り当て型) が基本。claimed の再取得は
-        許す (クラッシュ後の再開を冪等にする)。done は拒否。引数なしは次の pending
-        を pop する糖衣で、**直列・単独実行専用** (並列では必ず --id を使う)。
+        既定 (``block_id`` なし) は**自己サーブ**: 次の pending をアトミッククレーム
+        で獲得する。並列に呼ばれても、claim の排他作成に勝った 1 プロセスだけが
+        そのブロックを受け取り、負けた側は自動的に次の pending へ進む。
+        ``block_id`` 明示は復旧・再実行用 — claimed の再取得は許し (クラッシュ後の
+        引き継ぎを冪等にする)、done は拒否する。
         """
         if block_id is not None:
             block = self.find(block_id)
-            if block["status"] == "done":
+            if self.status_of(block_id) == "done":
                 raise DocAgentError(
                     f"ブロック '{block_id}' は処理済み (done) です。未完の一覧は"
                     " context-check --json。全体を作り直すなら context-set --force"
                 )
-        else:
-            block = next((b for b in self.blocks if b["status"] == "pending"), None)
-            if block is None:
-                state = self.check()
-                if state["complete"]:
-                    raise DocAgentError(
-                        "すべてのブロックが処理済みです。次の一手: context-check で"
-                        " 確認し、facts-merge でシャードを主ストアへ統合してください"
-                    )
-                claimed = ", ".join(i["id"] for i in state["incomplete"])
-                raise DocAgentError(
-                    f"pending のブロックがありません (処理中 claimed: {claimed})。"
-                    " 未完了のブロックを引き継ぐなら context-get --id <block_id>"
-                )
-        block["status"] = "claimed"
-        block["claimed_at"] = _now()
-        self.save()
-        return block
+            self._try_claim(block_id)  # 既に claim 済みでも引き継ぎとして許す
+            return block
+        for block in self.blocks:
+            if self.status_of(block["id"]) == "pending" and self._try_claim(block["id"]):
+                return block
+        state = self.check()
+        if state["complete"]:
+            raise DocAgentError(
+                "すべてのブロックが処理済みです。次の一手: context-check で"
+                " 確認し、facts-merge でシャードを主ストアへ統合してください"
+            )
+        claimed = ", ".join(i["id"] for i in state["incomplete"])
+        raise DocAgentError(
+            f"pending のブロックがありません (処理中 claimed: {claimed})。"
+            " 中断されたブロックを引き継ぐなら context-get --id <block_id>"
+        )
 
     def send(
         self,
@@ -345,8 +397,11 @@ class ContextQueue:
         location はブロック定義から server-side で付与する。シャードは毎回
         作り直すため再送は冪等 (二重取り込みにならない)。語彙外の type や
         不正な refs はその項目だけ拒否し、有効分は受理する (全体を止めない)。
+        done への遷移はシャードファイルの存在そのもので表す (context.json は
+        書き換えない)。
         """
         block = self.find(block_id)
+        self._try_claim(block_id)  # get を飛ばした send も claim を残す (状態の一貫性)
         shard = self.shard_path(block_id)
         fs = FactStore.load(shard, item_types_path, rel_types_path)
         fs.items = []  # 再送を冪等にする (シャードはこのブロックの結果の全量)
@@ -363,8 +418,6 @@ class ContextQueue:
                     statement=raw.get("statement") or "",
                     evidence=None,
                     location=dict(block["location"]),
-                    keywords=raw.get("keywords") or [],
-                    confidence=_valid_confidence(raw.get("confidence")),
                     refs=raw.get("refs"),
                 )
                 item["block_id"] = block_id
@@ -377,11 +430,7 @@ class ContextQueue:
                         "reason": str(e),
                     }
                 )
-        fs.save()
-        block["status"] = "done"
-        block["done_at"] = _now()
-        block["facts"] = len(added)
-        self.save()
+        fs.save()  # シャードの存在 = done (これ以外の状態書き込みはしない)
         by_type: dict[str, int] = {}
         for it in added:
             by_type[it["type"]] = by_type.get(it["type"], 0) + 1
@@ -392,11 +441,6 @@ class ContextQueue:
             "by_type": by_type,
             "rejected": rejected,
         }
-
-
-def _valid_confidence(value: Any) -> str | None:
-    """confidence の揺れを吸収する: 不正値は None に落とす (項目ごと拒否はしない)。"""
-    return value if value in CONFIDENCE_LEVELS else None
 
 
 # ── 対象文書の解決 (context-set の入力) ──────────────────────

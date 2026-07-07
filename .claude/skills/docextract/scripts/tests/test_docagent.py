@@ -333,15 +333,6 @@ class DocAgentTest(unittest.TestCase):
             lib.add_from_result(wrong)
         self.assertIn("elements", str(cm.exception))
 
-    # ── CLI: キーワード区切りの揺れ吸収 (fact-add 用) ──
-    def test_split_keywords_mixed_delimiters(self):
-        self.assertEqual(
-            cli._split_keywords("契約、金額，納期;保守；別表\n年額,契約"),
-            ["契約", "金額", "納期", "保守", "別表", "年額"],  # 重複「契約」は除去
-        )
-        self.assertEqual(cli._split_keywords("a,  ,b "), ["a", "b"])  # 空要素・空白除去
-        self.assertIsNone(cli._split_keywords(None))
-
     # ── CLI: set 系の自動登録 (前段 prep/add のスキップを補完) ──
     def test_resolve_target_auto_registers_path(self):
         rp = self._write_result("c.docx", texts=["中身"])
