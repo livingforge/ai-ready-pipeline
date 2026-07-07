@@ -629,8 +629,13 @@ def _snippet(text: str, start: int, end: int, width: int = 160) -> str:
 
 def _render_text(result: dict[str, Any]) -> str:
     """elements をプレーンテキストへ整形する (text 全文・表の全行・画像 OCR)。"""
+    return render_elements(result.get("elements", []))
+
+
+def render_elements(elements: list[dict[str, Any]]) -> str:
+    """要素リストをプレーンテキストへ整形する (context のブロック描画とも共用)。"""
     lines: list[str] = []
-    for el in result.get("elements", []):
+    for el in elements:
         t = el.get("type")
         if t == "text" and el.get("content"):
             lines.append(el["content"])

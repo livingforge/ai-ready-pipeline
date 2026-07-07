@@ -95,3 +95,12 @@ def item_types_path() -> Path:
 def rel_types_path() -> Path:
     """ファクト間参照 (refs) の関係種別定義ファイル (``<home>/store/rel_types.json``)。"""
     return store_dir() / "rel_types.json"
+
+
+def context_path() -> Path:
+    """ブロック作業キュー (``<home>/store/context.json``)。
+
+    context-set が確定した抽出対象ブロックの割り当て・進捗 (pending/claimed/done)
+    を保持する。:mod:`docagent.context` が読み書きする。
+    """
+    return store_dir() / "context.json"

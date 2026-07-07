@@ -17,6 +17,11 @@
     fact-add / facts / facts-pending / fact-remove / facts-stats / facts-export
     facts-merge   並列抽出したシャード facts.json を主ストアへ統合 (ID 振り直し)
     item-types / rel-types   ファクト種別・参照 (refs) の関係種別を管理
+  ブロック抽出プロトコル (spec-batch が set/check、spec-extractor が get/send):
+    context-set     文書群をブロック作業キューへ確定 (シート/ページ単位で結合・分割)
+    context-get     担当ブロックの本文+語彙を払い出す (pending→claimed)
+    context-send    抽出結果 [{type, statement, refs?}] をシャードへ保存 (→done)
+    context-check   done でないブロックを列挙 (facts-merge 前のバリア)
 
 すべてのサブコマンドは ``--json`` で機械可読な JSON を出力する
 (エージェントはこれをパースして次の操作を決める)。``--store`` で保存先を変更できる。
@@ -34,6 +39,7 @@ from docextract import config as _config
 from docextract import obs as _obs
 from docextract import paths as _paths
 
+from .context import ContextQueue, resolve_docs
 from .facts import FactStore
 from .store import (
     DEFAULT_DOCTYPES,
@@ -617,6 +623,114 @@ def cmd_rel_types(args):
     )
 
 
+# ── ブロック抽出プロトコル (context-set / get / send / check) ──
+def cmd_context_set(args):
+    lib = _load(args)
+    docs = resolve_docs(lib, files=args.files, folder=args.folder, doc_ids=args.docs)
+    limit = args.max_chars if args.max_chars is not None else args.cfg["block_max_chars"]
+    queue, skipped = ContextQueue.build(
+        args.context, lib, docs, block_max_chars=limit, force=args.force
+    )
+    payload = {
+        "context": str(queue.path).replace("\\", "/"),
+        "block_max_chars": limit,
+        "docs": len(docs),
+        "skipped": skipped,
+        "blocks": [
+            {"id": b["id"], "doc_id": b["doc_id"], "units": b["units"], "chars": b["chars"]}
+            for b in queue.blocks
+        ],
+    }
+
+    def human(o):
+        print(f"コンテキストを確定: {len(o['blocks'])} ブロック / {o['docs']} 文書")
+        for b in o["blocks"]:
+            print(f"  {b['id']:32} {', '.join(b['units'])} ({b['chars']}字)")
+        for s in o["skipped"]:
+            print(f"  スキップ: {s['id']} ({s['reason']})")
+
+    _emit(payload, args.json, human, hint="--max-chars を上げてブロック数を減らす")
+
+
+def cmd_context_get(args):
+    queue = ContextQueue.load(args.context)
+    block = queue.get(args.id)
+    fs = _load_facts(args)  # 語彙 (item_types/rel_types) を同梱して追加コールを不要に
+    remaining = sum(1 for b in queue.blocks if b["status"] == "pending")
+    payload = {
+        "id": block["id"],
+        "doc_id": block["doc_id"],
+        "source": block["source"],
+        "units": block["units"],
+        "location": block["location"],
+        "chars": block["chars"],
+        "text": block["text"],
+        "item_types": fs.item_types,
+        "rel_types": fs.rel_types,
+        "remaining_pending": remaining,
+    }
+
+    def human(o):
+        print(f"ブロック {o['id']} ({o['source']} / {', '.join(o['units'])} / {o['chars']}字)")
+        print(o["text"])
+
+    _emit(
+        payload,
+        args.json,
+        human,
+        hint="ブロックが大きすぎます。context-set --max-chars を下げて作り直すか --stdout",
+    )
+
+
+def cmd_context_send(args):
+    queue = ContextQueue.load(args.context)
+    raw = args.result
+    if raw == "-":
+        raw = sys.stdin.read()
+    elif raw.startswith("@"):
+        raw = Path(raw[1:]).read_text(encoding="utf-8-sig")
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise DocAgentError(
+            "--result は JSON 配列で指定してください (インライン / @ファイル / '-'=stdin)。"
+            f' 例: \'[{{"type":"機能要件","statement":"…"}}]\': {e}'
+        ) from e
+    if not isinstance(items, list):
+        raise DocAgentError("--result は抽出項目オブジェクトの JSON 配列です。")
+    result = queue.send(
+        args.id, items, args.item_types_file, args.rel_types_file
+    )
+
+    def human(o):
+        by = ", ".join(f"{k}={v}" for k, v in o["by_type"].items())
+        print(f"保存しました: {o['id']} -> {o['shard']} (追加 {o['added']} 件: {by})")
+        for r in o["rejected"]:
+            print(f"  拒否 [{r['index']}]: {r['reason']}")
+
+    _emit(result, args.json, human)
+
+
+def cmd_context_check(args):
+    queue = ContextQueue.load(args.context)
+    state = queue.check()
+
+    def human(o):
+        st = o["by_status"]
+        print(
+            f"ブロック {o['total']} 件: done={st.get('done', 0)}"
+            f" claimed={st.get('claimed', 0)} pending={st.get('pending', 0)}"
+        )
+        for i in o["incomplete"]:
+            print(f"  未完: {i['id']} ({i['status']}) {', '.join(i['units'])}")
+        if o["complete"]:
+            print("すべて処理済み。次: facts-merge " + " ".join(o["shards"]))
+
+    _emit(state, args.json, human)
+    # オーケストレータがバリアとして使えるよう、未完があれば非ゼロで返す。
+    return 0 if state["complete"] else 3
+
+
 # ── 補助 ─────────────────────────────────────────────────────
 # キーワードの区切り揺れ (半角/全角カンマ・読点・セミコロン・改行) を吸収する。
 _KEYWORD_DELIMS = re.compile(r"[,、，;；\n\r\t]+")
@@ -743,6 +857,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default=argparse.SUPPRESS,
         help="数値ガード等の設定ファイル (既定 <home>/config.json)",
+    )
+    common.add_argument(
+        "--context",
+        default=argparse.SUPPRESS,
+        help="ブロック作業キューの保存先 (既定 store/context.json)",
     )
     common.add_argument(
         "--stdout",
@@ -963,6 +1082,46 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("name", nargs="?")
     sp.set_defaults(func=cmd_rel_types)
 
+    # ── ブロック抽出プロトコル (低トークンの2動詞: get/send + set/check) ──
+    sp = add("context-set", "文書群をブロック作業キューへ確定 (オーケストレータ用)")
+    sp.add_argument("--files", nargs="+", help="対象の元ファイル (source 名か絶対パスで照合)")
+    sp.add_argument("--folder", help="このフォルダ配下の登録済み文書をすべて対象にする")
+    sp.add_argument("--docs", nargs="+", help="登録済み文書 ID を直接指定")
+    sp.add_argument(
+        "--max-chars",
+        type=int,
+        default=None,
+        help="1 ブロックの本文上限 (既定は config.json の block_max_chars=12000)",
+    )
+    sp.add_argument(
+        "--force",
+        action="store_true",
+        help="未完 (pending/claimed) が残っていてもキューを作り直す",
+    )
+    sp.set_defaults(func=cmd_context_set)
+
+    sp = add("context-get", "担当ブロックの本文+語彙を払い出す (サブエージェント用)")
+    sp.add_argument(
+        "--id",
+        help="ブロック ID (オーケストレータが割り当てた担当分)。省略時は次の pending"
+        " を pop する (直列・単独実行専用。並列では必ず --id を指定)",
+    )
+    sp.set_defaults(func=cmd_context_get)
+
+    sp = add("context-send", "抽出結果をシャードへ保存しブロックを done にする")
+    sp.add_argument("--id", required=True, help="ブロック ID (context-get で受けた担当分)")
+    sp.add_argument(
+        "--result",
+        required=True,
+        help="抽出項目の JSON 配列。インライン / @ファイル / '-'=stdin。"
+        ' 各項目: {"type":"種別","statement":"1文","refs":[{"rel":"realizes",'
+        '"to_ref":"F-02"}],"keywords":["語"],"confidence":"high"} (refs 以降は任意)',
+    )
+    sp.set_defaults(func=cmd_context_send)
+
+    sp = add("context-check", "done でないブロックを列挙 (facts-merge 前のバリア)")
+    sp.set_defaults(func=cmd_context_check)
+
     return p
 
 
@@ -984,6 +1143,7 @@ def main(argv: list[str] | None = None) -> int:
     args.item_types_file = getattr(args, "item_types_file", str(_paths.item_types_path()))
     args.rel_types_file = getattr(args, "rel_types_file", str(_paths.rel_types_path()))
     args.config = getattr(args, "config", str(_paths.config_path()))
+    args.context = getattr(args, "context", str(_paths.context_path()))
     args.stdout = getattr(args, "stdout", False)
     args.json = getattr(args, "json", False)
     # 数値ガードの設定を読み込み、各ハンドラと出力ガードへ反映する。
@@ -1000,13 +1160,15 @@ def main(argv: list[str] | None = None) -> int:
     log = _obs.open_run("docagent.cli", getattr(args, "run_id", None))
     log.event("command.start", command=args.command)
     try:
-        args.func(args)
+        # ハンドラは通常 None を返す。context-check のように「状態を終了コードで
+        # 伝える」ハンドラだけ int を返す (未完 3 など。エラーの 1 とは区別)。
+        rc = args.func(args)
     except DocAgentError as e:
         log.error("command.error", command=args.command, error=str(e))
         print(f"エラー: {e}", file=sys.stderr)
         return 1
     log.event("command.done", command=args.command)
-    return 0
+    return rc if isinstance(rc, int) else 0
 
 
 if __name__ == "__main__":

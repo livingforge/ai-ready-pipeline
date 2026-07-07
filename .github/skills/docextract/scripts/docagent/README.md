@@ -21,8 +21,8 @@
 | エージェント | 役割（工程） | 使いどころ |
 |------------|------|-----------|
 | **doc-indexer** | フォルダを一括抽出し、衝突しない ID で索引化。各資料に**文書種別**を付与、内容重複も把握（要約はしない） | 「資料を取り込んで索引化して」 |
-| **spec-extractor** | 文書から機能要件・データ項目・画面/帳票・非機能要件等を**出典付きファクト**に項目化 | 個別の仕様洗い出し |
-| **spec-batch** | 複数文書の仕様抽出を**文書ごとに spec-extractor を並列起動**し、シャードを `facts-merge` で統合する司令塔 | 「全文書をまとめて/並列で洗い出して」 |
+| **spec-extractor** | 割り当てられた**ブロック**（`context-get`）から機能要件・データ項目・画面/帳票・非機能要件等を項目化し `context-send` で返す。出典（doc_id + location）はブロック定義から自動付与 | 個別の仕様洗い出し |
+| **spec-batch** | 対象文書を `context-set` で**ブロックの作業キュー**に確定し、**ブロックごとに spec-extractor を並列起動**。`context-check` のバリア後にシャードを `facts-merge` で統合する司令塔 | 「全文書をまとめて/並列で洗い出して」 |
 | **doc-qa** | 抽出済み資料を横断検索し、**必ず出典付きで**問いに答える（無ければ「該当なし」） | 「既存仕様では〜はどうなっている？」 |
 
 呼び出しは Claude Code 上で `@doc-indexer` のように指定する。通常はまず **@doc-indexer**
@@ -40,6 +40,13 @@
   **facts-stats** / **facts-export** / **facts-merge**（並列抽出したシャードを
   主ストアへ統合。ID 振り直し・語彙は和集合・完全重複はスキップ）/
   **item-types**（種別の表示・編集）/ **rel-types**（ファクト参照 refs の関係種別の表示・編集）
+- **ブロック抽出プロトコル（context.json / spec-batch + spec-extractor 用）**:
+  **context-set**（文書群をシート/ページ最小単位のブロック作業キューへ確定。上限
+  `block_max_chars` まで結合・超過時は文境界で分割）/ **context-get**（担当ブロックの
+  本文+語彙を払い出す。pending→claimed）/ **context-send**（抽出結果
+  `[{type, statement, refs?}]` をブロック専用シャードへ保存。location はブロック定義から
+  自動付与。→done）/ **context-check**（done でないブロックを列挙。`facts-merge` 前の
+  バリア。未完なら exit 3）
 
 > **起動方法**: 以下の `python -m docagent` は、docagent パッケージのある
 > ディレクトリ（リポジトリ直下、またはバンドルの `scripts/`）が cwd のときだけ
@@ -61,7 +68,26 @@ python -m docagent list --json --limit 20 --offset 0      # または --limit/--
 python -m docagent stats                                  # 文書種別別の件数
 ```
 
-### 仕様の洗い出し（spec-extractor）: 出典付きファクト
+### 仕様の洗い出し（spec-batch + spec-extractor）: ブロック抽出プロトコル
+
+エージェントの入出力を 2 コマンド（`context-get` / `context-send`）に固定し、
+出典（`doc_id` + `location`）をツール側で付与する低トークンの標準フロー:
+
+```bash
+# オーケストレータ (spec-batch)
+python -m docagent context-set --docs <id> <id> --json    # 対象をブロックへ確定（--files/--folder も可）
+python -m docagent context-check --json                   # バリア: 未完ブロックの列挙（未完なら exit 3）
+python -m docagent facts-merge .docextract/store/shards/facts.*.json   # 完了後に統合
+
+# サブエージェント (spec-extractor)。この 2 コマンドだけで完結する
+python -m docagent context-get --id <block_id> --json     # 担当ブロックの本文+語彙を受け取る
+python -m docagent context-send --id <block_id> --json \
+    --result '[{"type":"機能要件","statement":"ユーザは月次売上をCSVで出力できる","confidence":"high"},
+               {"type":"メソッド","statement":"register() は予約を登録する",
+                "refs":[{"rel":"realizes","to_ref":"F-02"}]}]'   # 工程間トレースは refs で構造化
+```
+
+単発の手動登録や補正には低レベル API も使える（出典は自分で接地する）:
 
 ```bash
 python -m docagent item-types --json                      # 使える種別を確認
@@ -72,9 +98,6 @@ python -m docagent fact-add --doc <id> --type "機能要件" \
     --evidence "月次売上はCSVエクスポート可能" \
     --location '{"page": 3}' --keywords "CSV,売上" --confidence high
 python -m docagent rel-types --json                       # 参照(refs)に使える関係種別を確認
-python -m docagent fact-add --doc <id> --type "メソッド" \
-    --statement "register() は予約を登録する" \
-    --ref realizes=F-02 --ref "refines=SCR-03|画面遷移元"  # 工程間トレースを構造化
 python -m docagent facts --doc <id>                       # 抽出済みファクトを一覧
 python -m docagent facts-pending --json                   # まだファクトが1件も無い文書を洗い出す
 python -m docagent facts-export -o facts.json             # ファクトを1ファイルに出力
@@ -148,7 +171,9 @@ python -m docagent doctypes remove "その他"
 ### 仕様ファクト JSON（`.docextract/store/facts.json`）の構造
 
 spec-extractor が保存する、出典付きの仕様/要件項目。各項目は必ず `doc_id`（どの文書）+
-`location`（どこ）+ `evidence`（原文）を持ち、後工程が根拠を辿れる。
+`location`（どこ）を持ち、後工程が根拠を辿れる。ブロック抽出プロトコルでは location を
+ブロック定義から自動付与し、`evidence`（原文）は持たない（location のシート/ページで
+範囲を絞れるため）。低レベル API（fact-add）での手動登録時は evidence を添える。
 
 ```jsonc
 {
