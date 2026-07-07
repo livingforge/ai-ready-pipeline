@@ -45,9 +45,6 @@ PACKAGED_ITEM_TYPES = Path(__file__).resolve().parent / "item_types.json"
 # 参照 (refs) の関係種別も同様に同梱デフォルト + 利用者編集 (store/rel_types.json)。
 PACKAGED_REL_TYPES = Path(__file__).resolve().parent / "rel_types.json"
 
-# confidence に許す値 (抽出器の確信度)。
-CONFIDENCE_LEVELS = ("high", "medium", "low")
-
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -256,21 +253,20 @@ class FactStore:
         statement: str,
         evidence: str | None = None,
         location: dict[str, Any] | None = None,
-        keywords: Iterable[str] | None = None,
-        confidence: str | None = None,
         refs: Iterable[dict[str, Any]] | None = None,
         force: bool = False,
     ) -> dict[str, Any]:
-        """ファクトを1件追加する。``type`` はタクソノミーへ正規化して許可。"""
+        """ファクトを1件追加する。``type`` はタクソノミーへ正規化して許可。
+
+        keywords / confidence は持たない — 後工程が実際に使わない付帯情報で、
+        LLM に出力させるだけコンテキストと出力トークンの無駄になるため廃止した
+        (名寄せは statement の正規化包含 + bigram Jaccard で足りる)。
+        """
         if not doc_id:
             raise DocAgentError("doc_id は必須です (どの文書から抽出したか)。")
         if not (statement or "").strip():
             raise DocAgentError("statement は必須です (抽出した事実の本文)。")
         resolved = _resolve_term(type, self.item_types, force=force, label="種別")
-        if confidence is not None and confidence not in CONFIDENCE_LEVELS:
-            raise DocAgentError(
-                f"confidence は {', '.join(CONFIDENCE_LEVELS)} のいずれかです: {confidence}"
-            )
         item = {
             "id": self._next_id(),
             "doc_id": doc_id,
@@ -278,9 +274,7 @@ class FactStore:
             "statement": statement.strip(),
             "evidence": (evidence or "").strip() or None,
             "location": location or {},
-            "keywords": [k.strip() for k in (keywords or []) if k.strip()],
             "refs": self._normalize_refs(refs, force=force),
-            "confidence": confidence,
             "added_at": _now(),
         }
         self.items.append(item)
@@ -299,7 +293,7 @@ class FactStore:
         完了後にこのメソッドで統合する（順序非依存・データ競合ゼロ）。
 
         - **ID は取り込み側で振り直す**（シャード間の連番衝突を避ける）。
-        - 出典・``refs``・``keywords`` 等はそのまま保持する。
+        - 出典・``refs`` 等はそのまま保持する。
         - 種別語彙 (``item_types`` / ``rel_types``) はシャード側の追加も失わないよう和集合。
         - 同一 (``doc_id``, ``type``, ``statement``) のファクトはスキップ（シャードの
           二重取り込みに対して冪等。意味的な重複統合は spec-reconcile の役割）。
@@ -377,7 +371,6 @@ def _searchable(item: dict[str, Any]) -> str:
     parts = [
         item.get("statement", ""),
         item.get("evidence") or "",
-        " ".join(item.get("keywords", [])),
         " ".join(
             f"{r.get('rel','')} {r.get('to_ref','')}" for r in item.get("refs", [])
         ),

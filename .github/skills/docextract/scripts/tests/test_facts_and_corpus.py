@@ -74,18 +74,20 @@ class FactStoreTest(unittest.TestCase):
         forced = fs.add("d", "独自種別", "何か", force=True)
         self.assertEqual(forced["type"], "独自種別")
 
-    def test_required_fields_and_confidence_validation(self):
+    def test_required_fields(self):
         fs = self._fs()
         with self.assertRaises(DocAgentError):
             fs.add("", "機能要件", "本文")  # doc_id 必須
         with self.assertRaises(DocAgentError):
             fs.add("d", "機能要件", "   ")  # statement 必須
-        with self.assertRaises(DocAgentError):
-            fs.add("d", "機能要件", "本文", confidence="maybe")  # 不正な確信度
+        # keywords / confidence は廃止済み — アイテムに含まれない
+        item = fs.add("d", "機能要件", "本文")
+        self.assertNotIn("keywords", item)
+        self.assertNotIn("confidence", item)
 
     def test_query_and_stats(self):
         fs = self._fs()
-        fs.add("doc_a", "機能要件", "CSV出力", keywords=["CSV"])
+        fs.add("doc_a", "機能要件", "CSV出力")
         fs.add("doc_a", "非機能要件", "レスポンス3秒以内")
         fs.add("doc_b", "機能要件", "PDF出力")
         self.assertEqual(len(fs.query(doc_id="doc_a")), 2)

@@ -146,6 +146,56 @@ def test_get_requires_context_set_first(store, capsys):
     assert "context-set" in capsys.readouterr().err  # 次の一手を案内する
 
 
+def test_argless_get_dispenses_distinct_blocks_atomically(store, tmp_path, capsys):
+    # 自己サーブ払い出し: 引数なしの get が次の pending を自動獲得し、
+    # 連続して呼んでも同じブロックを二重に払い出さない。
+    doc_id = _register(store, tmp_path, "p.xlsx", {"a": "あ" * 40, "b": "い" * 40})
+    store("context-set", "--docs", doc_id, "--max-chars", "50", "--json")
+    capsys.readouterr()
+    assert store("context-get", "--json") == 0
+    first = _out_json(capsys)
+    assert store("context-get", "--json") == 0
+    second = _out_json(capsys)
+    assert first["id"] != second["id"]  # アトミッククレームで別ブロック
+    # クレームはファイルの排他作成で表現される (context.json は書き換えない)
+    claims = sorted(p.name for p in (tmp_path / "store" / "claims").glob("*.claim"))
+    assert claims == [f"{first['id']}.claim", f"{second['id']}.claim"]
+    # 全ブロック claimed → 引数なし get は「引き継ぎは --id」と案内して失敗する
+    assert store("context-get", "--json") == 1
+    assert "--id" in capsys.readouterr().err
+
+
+def test_claimed_block_is_skipped_by_argless_get(store, tmp_path, capsys):
+    # 別プロセスが claim 済み (= claim ファイルが先に存在する) のブロックは飛ばす。
+    doc_id = _register(store, tmp_path, "r.xlsx", {"a": "あ" * 40, "b": "い" * 40})
+    store("context-set", "--docs", doc_id, "--max-chars", "50", "--json")
+    claim = tmp_path / "store" / "claims" / f"{doc_id}.b01.claim"
+    claim.parent.mkdir(parents=True, exist_ok=True)
+    claim.write_text("other-process\n", encoding="utf-8")
+    capsys.readouterr()
+    assert store("context-get", "--json") == 0
+    assert _out_json(capsys)["id"] == f"{doc_id}.b02"
+
+
+def test_force_rebuild_resets_progress(store, tmp_path, capsys):
+    # 進捗はファイル (claim/シャード) から導出するため、--force の作り直しは
+    # 前回の痕跡を消して全ブロックを pending に戻す。
+    doc_id = _register(store, tmp_path, "w.xlsx", {"s": "本文です。"})
+    store("context-set", "--docs", doc_id, "--json")
+    store("context-get", "--json")
+    store("context-send", "--id", f"{doc_id}.b01", "--result",
+          json.dumps([{"type": "用語", "statement": "語: 定義"}], ensure_ascii=False),
+          "--json")
+    capsys.readouterr()
+    assert store("context-check", "--json") == 0  # いったん complete
+    capsys.readouterr()
+    assert store("context-set", "--docs", doc_id, "--force", "--json") == 0
+    capsys.readouterr()
+    assert store("context-check", "--json") == 3  # pending に戻っている
+    state = _out_json(capsys)
+    assert state["by_status"]["pending"] == state["total"]
+
+
 def test_get_returns_text_vocab_and_claims(store, tmp_path, capsys):
     doc_id = _register(store, tmp_path, "v.xlsx", {"項目": "顧客コードは8桁。"})
     store("context-set", "--docs", doc_id, "--json")
@@ -216,6 +266,38 @@ def test_send_rejects_non_array_result(store, tmp_path, capsys):
     capsys.readouterr()
     assert store("context-send", "--id", f"{doc_id}.b01", "--result", "{}", "--json") == 1
     assert store("context-send", "--id", f"{doc_id}.b01", "--result", "壊れたJSON", "--json") == 1
+
+
+# ── 既定出力: 軽量エージェント形式 (--json 不要) ─────────────────
+def test_get_default_output_is_agent_format(store, tmp_path, capsys):
+    # 既定出力はメタ行 + 生テキスト。JSON のエスケープ・引用符の冗長を避け、
+    # 語彙 (types/rels) と send に使う id を含む。
+    doc_id = _register(store, tmp_path, "af.xlsx", {"画面": "1行目。\n2行目。"})
+    store("context-set", "--docs", doc_id, "--json")
+    capsys.readouterr()
+    assert store("context-get") == 0
+    out = capsys.readouterr().out
+    assert f"id: {doc_id}.b01" in out
+    assert "types: 機能要件" in out          # 語彙同梱
+    assert "rels: realizes" in out
+    assert "1行目。\n2行目。" in out          # 生テキスト (\n エスケープなし)
+    assert '"text"' not in out               # JSON 形式ではない
+
+
+def test_send_and_check_default_output_agent_format(store, tmp_path, capsys):
+    doc_id = _register(store, tmp_path, "ag.xlsx", {"s": "本文です。"})
+    store("context-set", "--docs", doc_id, "--json")
+    capsys.readouterr()
+    items = [{"type": "用語", "statement": "語: 定義"}, {"type": "謎", "statement": "x"}]
+    assert store("context-send", "--id", f"{doc_id}.b01",
+                 "--result", json.dumps(items, ensure_ascii=False)) == 0
+    out = capsys.readouterr().out
+    assert "added: 1 (用語=1)" in out
+    assert "rejected: 1" in out
+    assert store("context-check") == 0       # 既定出力でも exit コードは同じ
+    out = capsys.readouterr().out
+    assert "complete: true" in out
+    assert "shards:" in out
 
 
 # ── context-check + facts-merge: バリアと統合 ────────────────────
