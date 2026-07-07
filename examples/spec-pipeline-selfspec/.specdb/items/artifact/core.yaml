@@ -145,9 +145,9 @@
   path: specdb/packs/jp-sier-std/
   format: specdb pack
   description: >-
-    日本 SIer 向けの標準設計書パック。画面・エンティティ・データ項目・業務ルール・外部インターフェースのドメインメタモデル、基本設計書（Excel 風 HTML・block 規約準拠）/ テーブル定義書 / 画面仕様書の文書カタログ、L2 準拠規則（conformance/rules.yaml）を束ねる。ビルドで scripts/packs/ へ同梱され、消費側プロジェクトは metamodel.yaml に extends: jp-sier-std@1.0 と書いて継承する。
-  status: approved
+    日本 SIer 向けの標準設計書パック。要件〜基本設計〜詳細設計の全工程のドメインメタモデル（要件・画面・エンティティ・データ項目・業務ルール・外部インターフェース・モジュール・メソッドと工程間トレース realizes/refines/has-method）、要件定義書／基本設計書／詳細設計書／要件・設計対応表 の 4 文書カタログ（いずれも共通様式 _house-style を用いた Excel 風 HTML で、表紙・改訂履歴・シートタブ・PDF 印刷に対応する。単体の画面仕様書・テーブル定義書は基本設計書の章へ統合して廃止した）、L2 準拠規則（conformance/rules.yaml）を束ねる。ビルドで scripts/packs/ へ同梱され、消費側プロジェクトは metamodel.yaml に extends: jp-sier-std@1.1 と書いて継承する。
+  status: review
   source:
-    doc: specdb/README.md
-    location: {section: 同梱パック jp-sier-std}
-    evidence: 日本 SIer 向けの実パックを specdb/packs/jp-sier-std/ に同梱している
+    doc: specdb/packs-src/jp-sier-std/items/doc-type/core.yaml
+    location: {section: 標準文書カタログの正本}
+    evidence: '工程順: 要件定義書 → 基本設計書 → 詳細設計書 → 要件・設計対応表'

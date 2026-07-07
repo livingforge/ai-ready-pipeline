@@ -1,0 +1,74 @@
+{#-
+  jp-sier-std 要件定義書（Excel 風 HTML・自動生成）
+
+  基本設計書と体裁（_house-style）を揃えた納品用 HTML。ただし非 abstract の台帳
+  文書なので、パラメータ（doc_no/version/org）は任意で、無くてもデータから直接
+  生成できるよう doc.get(...) で受ける。block は使わずマクロで組むため block 規約
+  （pack check）の対象外。ドメイン種別: requirement（機能/非機能）。
+-#}
+{% import "_house-style.html.j2" as ex %}
+{% set reqs = store.items_of('requirement') %}
+{{ ex.page_start(doc.title) }}
+
+{# ---- 表紙 ---- #}
+{{ ex.cover(doc.title, doc.get('doc_no', ''), doc.get('version', ''),
+            generated_at[:10], doc.get('org', '')) }}
+
+{# ---- 改訂履歴（Git 履歴があれば実履歴、無ければ初版1行） ---- #}
+{% call ex.sheet('改訂履歴', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{% if data_history %}
+{% set rows = [] %}
+{% for h in data_history %}
+{% set _ = rows.append({'version': loop.index, 'date': h.date,
+    'note': (h.subject ~ '：' if h.subject and not h.initial else '') ~ h.summary
+            ~ '（' ~ (h.short if h.short else '未コミット') ~ '）',
+    'author': h.author}) %}
+{% endfor %}
+{{ ex.rev_history(rows) }}
+{% else %}
+{{ ex.rev_history([{'version': doc.get('version', '1.0'), 'date': generated_at[:10],
+    'note': '初版（データ版 ' ~ data_rev ~ ' から自動生成）', 'author': 'specdb'}]) }}
+{% endif %}
+{% endcall %}
+
+{# ---- 目次 ---- #}
+{% call ex.sheet('目次', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.toc([
+  {'no': '1',   'sheet': '1. 機能要件',   'desc': '実現する設計要素つきの機能要件一覧'},
+  {'no': '2',   'sheet': '2. 非機能要件', 'desc': '性能・品質などの非機能要件一覧'},
+  {'no': '付録', 'sheet': '付録 出典一覧', 'desc': '各要件の出典（元資料・箇所・原文）'},
+]) }}
+{% endcall %}
+
+{# ---- 本文: 機能要件 / 非機能要件 ---- #}
+{% for kind, no, name in [('機能', '1', '機能要件'), ('非機能', '2', '非機能要件')] %}
+{% call ex.sheet(no ~ '. ' ~ name, doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec(no, name) }}
+<table class="xl">
+  <tr><th style="width:12%">要件ID</th><th style="width:22%">要件名</th>
+      <th>内容</th><th style="width:26%">実現する設計要素</th></tr>
+  {% for r in reqs if r.attrs.kind == kind %}
+  {% set realizers = store.relations_of('realizes', dst=r.id)|map(attribute='src')|map('item_label')|list %}
+  <tr>
+    <td class="c">{{ r.attrs.req_id }}</td><td>{{ r.attrs.name }}</td>
+    <td>{{ r.attrs.statement }}</td>
+    {% if realizers %}<td>{{ realizers|join('、') }}</td>
+    {% else %}<td class="st-review">⚠️ 未実現（カバレッジ・ギャップ）</td>{% endif %}
+  </tr>
+  {% endfor %}
+</table>
+{% endcall %}
+{% endfor %}
+
+{# ---- 付録 出典一覧 ---- #}
+{% call ex.sheet('付録 出典一覧', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('付録', '出典一覧') }}
+{% set rows = [] %}
+{% for it in reqs %}
+{% if it.source %}{% set _ = rows.append({'name': it.label(mm), 'kind': mm.item_types[it.type].label,
+    'id': it.id, 'src': it.source}) %}{% endif %}
+{% endfor %}
+{% if rows %}{{ ex.appendix_sources(rows) }}{% else %}{{ ex.prose('出典の登録はありません。') }}{% endif %}
+{% endcall %}
+
+{{ ex.page_end() }}

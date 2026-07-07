@@ -12,13 +12,13 @@
 
 - id: sp-requirement-spec
   name: 要件定義書テンプレート
-  file: requirement-spec.md.j2
+  file: requirement-spec.html.j2
   role: document
   status: approved
   source:
-    doc: specdb/packs/jp-sier-std/templates/requirement-spec.md.j2
-    location: { section: Markdown }
-    evidence: 機能/非機能要件を realizes のカバレッジ付きで列挙する
+    doc: specdb/packs/jp-sier-std/templates/requirement-spec.html.j2
+    location: { section: Excel 風 HTML }
+    evidence: 機能/非機能要件を realizes のカバレッジ付きで列挙する（house-style 使用）
 
 - id: sp-basic-design
   name: 基本設計書テンプレート
@@ -32,20 +32,20 @@
 
 - id: sp-detail-design
   name: 詳細設計書テンプレート
-  file: detail-design.md.j2
+  file: detail-design.html.j2
   role: document
   status: approved
   source:
-    doc: specdb/packs/jp-sier-std/templates/detail-design.md.j2
-    location: { section: Markdown }
-    evidence: モジュール（クラス）/メソッドを refines・realizes 付きで列挙する
+    doc: specdb/packs/jp-sier-std/templates/detail-design.html.j2
+    location: { section: Excel 風 HTML }
+    evidence: モジュール（クラス）/メソッドを refines・realizes 付きで列挙する（house-style 使用）
 
 - id: sp-traceability-matrix
-  name: トレーサビリティ・マトリクステンプレート
-  file: traceability-matrix.md.j2
+  name: 要件・設計対応表テンプレート
+  file: traceability-matrix.html.j2
   role: document
   status: approved
   source:
-    doc: specdb/packs/jp-sier-std/templates/traceability-matrix.md.j2
-    location: { section: Markdown }
-    evidence: 要件→設計→メソッドのトレースとカバレッジ・ギャップを一覧する
+    doc: specdb/packs/jp-sier-std/templates/traceability-matrix.html.j2
+    location: { section: Excel 風 HTML }
+    evidence: 要件→設計→メソッドのトレースとカバレッジ・ギャップを一覧する（house-style 使用）

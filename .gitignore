@@ -6,7 +6,6 @@
 !/.claude/
 !/.github/
 !/.specdb/
-!/examples/
 !/README.md
 !/.gitignore
 !/.gitattributes
@@ -21,4 +20,3 @@ build/
 *.egg-info/
 # 生成ビュー (specdb generate/visualize で再生成できる) は追跡しない
 /.specdb/out/
-/examples/spec-pipeline-selfspec/.specdb/out/

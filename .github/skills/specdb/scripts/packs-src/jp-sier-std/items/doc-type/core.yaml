@@ -1,17 +1,17 @@
 # 標準文書カタログの正本 — ここから dist の documents/*.yaml が生成される。
-# 工程順: 要件定義書 → 基本設計書 → 詳細設計書 → トレーサビリティ・マトリクス。
+# 工程順: 要件定義書 → 基本設計書 → 詳細設計書 → 要件・設計対応表。
 # 画面/テーブルは基本設計書の章に統合したため、単体の画面仕様書/テーブル定義書は廃止。
 - id: dt-requirement-spec
   name: requirement-spec
   title: 要件定義書
-  output: 要件定義書.md
-  template: requirement-spec.md.j2
+  output: 要件定義書.html
+  template: requirement-spec.html.j2
   order: 1
   status: approved
   source:
     doc: specdb/packs/jp-sier-std/documents/requirement-spec.yaml
     location: { section: 文書定義 }
-    evidence: 要件定義書 — 機能/非機能要件を realizes のカバレッジ付きで列挙する台帳（非 abstract）
+    evidence: 要件定義書（Excel 風 HTML）— 機能/非機能要件を realizes のカバレッジ付きで列挙する台帳（非 abstract）
 
 - id: dt-basic-design
   name: basic-design
@@ -31,23 +31,23 @@
 - id: dt-detail-design
   name: detail-design
   title: 詳細設計書
-  output: 詳細設計書.md
-  template: detail-design.md.j2
+  output: 詳細設計書.html
+  template: detail-design.html.j2
   order: 3
   status: approved
   source:
     doc: specdb/packs/jp-sier-std/documents/detail-design.yaml
     location: { section: 文書定義 }
-    evidence: 詳細設計書 — モジュール（クラス）/メソッドを refines・realizes 付きで列挙する台帳（非 abstract）
+    evidence: 詳細設計書（Excel 風 HTML）— モジュール（クラス）/メソッドを refines・realizes 付きで列挙する台帳（非 abstract）
 
 - id: dt-traceability-matrix
   name: traceability-matrix
-  title: トレーサビリティ・マトリクス
-  output: トレーサビリティ.md
-  template: traceability-matrix.md.j2
+  title: 要件・設計対応表
+  output: 要件・設計対応表.html
+  template: traceability-matrix.html.j2
   order: 4
   status: approved
   source:
     doc: specdb/packs/jp-sier-std/documents/traceability-matrix.yaml
     location: { section: 文書定義 }
-    evidence: 要件→基本設計→詳細設計→メソッドのV字トレースとカバレッジ・ギャップを一覧する台帳（非 abstract）
+    evidence: 要件・設計対応表（Excel 風 HTML）— 要件→基本設計→詳細設計→メソッドの対応（V字トレース）とカバレッジ・ギャップを一覧する台帳（非 abstract）

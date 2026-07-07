@@ -16,7 +16,8 @@ docextract で抽出し docagent で索引化した文書を LLM で要約する
   依存する docextract / docagent パッケージは同梱せず、同じプロジェクトに展開された
   **兄弟スキル docextract** を実行時参照する（docextract スキルが必要）。
   venv コマンド **`docsummary`** として任意のディレクトリから実行できる
-  （venv 未 activate なら `.venv/Scripts/docsummary`、venv 構築前は
+  （venv 未 activate なら `.venv/Scripts/docsummary`（Windows）/
+  `.venv/bin/docsummary`（macOS/Linux）、venv 構築前は
   `python .claude/skills/docsummary run ...` で同じ）
 - 対応プロバイダ: **openai / azure (Azure OpenAI) / gemini / anthropic**。
   追加ライブラリ不要（標準ライブラリのみで REST API を呼ぶ）
@@ -52,9 +53,9 @@ docsummary config --init    # プロジェクトルートに .env / .env.example
 | gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` (gemini-2.0-flash) |
 | anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` (claude-opus-4-8) |
 
-**エージェント向けの規律**: `.env` は秘密情報を含むため **Read しない・cat しない・
-値を会話に出さない**。設定の有無は必ず `docsummary config --check` の出力で判断し、
-キーの記入は利用者自身に依頼する。`.env` は `.gitignore` に追加する。
+**秘密情報の扱い（エージェント向けの規律）**: `.env` は API キー等を含むため
+**Read しない・cat しない・値を会話に出さない**。設定の有無は必ず `config --check` の
+出力で判断し、キーの記入は利用者自身に依頼する。`.env` は `.gitignore` に追加する。
 
 ## 使い方 — 対象の指定
 

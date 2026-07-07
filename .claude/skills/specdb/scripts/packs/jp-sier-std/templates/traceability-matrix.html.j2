@@ -1,0 +1,97 @@
+{#-
+  jp-sier-std 要件・設計対応表（Excel 風 HTML・自動生成）
+
+  基本設計書と体裁（_house-style）を揃えた納品用 HTML。非 abstract の台帳文書で
+  パラメータは任意。block 未使用のため block 規約の対象外。要件から詳細設計までの
+  V字トレースと、設計に落ちていない要件（カバレッジ・ギャップ）を機械的に一覧する。
+-#}
+{% import "_house-style.html.j2" as ex %}
+{% set reqs = store.items_of('requirement') %}
+{{ ex.page_start(doc.title) }}
+
+{# ---- 表紙 ---- #}
+{{ ex.cover(doc.title, doc.get('doc_no', ''), doc.get('version', ''),
+            generated_at[:10], doc.get('org', '')) }}
+
+{# ---- 改訂履歴 ---- #}
+{% call ex.sheet('改訂履歴', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{% if data_history %}
+{% set rows = [] %}
+{% for h in data_history %}
+{% set _ = rows.append({'version': loop.index, 'date': h.date,
+    'note': (h.subject ~ '：' if h.subject and not h.initial else '') ~ h.summary
+            ~ '（' ~ (h.short if h.short else '未コミット') ~ '）',
+    'author': h.author}) %}
+{% endfor %}
+{{ ex.rev_history(rows) }}
+{% else %}
+{{ ex.rev_history([{'version': doc.get('version', '1.0'), 'date': generated_at[:10],
+    'note': '初版（データ版 ' ~ data_rev ~ ' から自動生成）', 'author': 'specdb'}]) }}
+{% endif %}
+{% endcall %}
+
+{# ---- 目次 ---- #}
+{% call ex.sheet('目次', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.toc([
+  {'no': '1', 'sheet': '1. 要件・設計対応', 'desc': '要件→基本設計→詳細設計→メソッドの対応（V字トレース）'},
+  {'no': '2', 'sheet': '2. カバレッジ',     'desc': '設計に落ちていない要件（ギャップ）の集計'},
+]) }}
+{% endcall %}
+
+{# ---- 1. 要件・設計対応 ---- #}
+{% call ex.sheet('1. 要件・設計対応', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('1', '要件・設計対応') }}
+<table class="xl">
+  <tr>
+    <th style="width:26%">要件</th>
+    <th>実現する設計要素<br>(realizes)</th>
+    <th>詳細化元の基本設計<br>(refines先)</th>
+    <th>メソッド<br>(has-method)</th>
+    <th style="width:8%">状態</th>
+  </tr>
+  {% for r in reqs %}
+  {% set realizers = store.relations_of('realizes', dst=r.id) %}
+  {% set refined = [] %}
+  {% set methods = [] %}
+  {% for x in realizers %}
+  {% for rf in store.relations_of('refines', src=x.src) %}{% set _ = refined.append(rf.dst|item_label) %}{% endfor %}
+  {% for hm in store.relations_of('has-method', src=x.src) %}{% set _ = methods.append(hm.dst|item_label) %}{% endfor %}
+  {% endfor %}
+  <tr>
+    <td>{{ r.attrs.req_id }}　{{ r.attrs.name }}〔{{ r.attrs.kind }}〕</td>
+    <td>{% for x in realizers %}{{ x.src|item_label }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if not realizers %}—{% endif %}</td>
+    <td>{{ refined|unique|list|join('、') or '—' }}</td>
+    <td>{{ methods|unique|list|join('、') or '—' }}</td>
+    {% if realizers %}<td class="c st-approved">実現</td>{% else %}<td class="c st-review">ギャップ</td>{% endif %}
+  </tr>
+  {% endfor %}
+</table>
+{% endcall %}
+
+{# ---- 2. カバレッジ ---- #}
+{% call ex.sheet('2. カバレッジ', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('2', 'カバレッジ') }}
+{% set gaps = [] %}
+{% for r in reqs %}
+{% if not store.relations_of('realizes', dst=r.id) %}{% set _ = gaps.append(r) %}{% endif %}
+{% endfor %}
+{{ ex.kv([('要件総数', reqs|length),
+          ('設計に落ちている', reqs|length - gaps|length),
+          ('ギャップ', gaps|length)]) }}
+{% if gaps %}
+<table class="xl">
+  <tr><th style="width:14%">要件ID</th><th style="width:30%">要件名</th><th>状況</th></tr>
+  {% for g in gaps %}
+  <tr class="st-review">
+    <td class="c">{{ g.attrs.req_id }}</td>
+    <td>{{ g.attrs.name }}〔{{ g.attrs.kind }}〕</td>
+    <td>realizes 関係なし（基本設計/詳細設計に未展開）</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+{{ ex.prose('すべての要件が設計に展開されています（カバレッジ・ギャップなし）。') }}
+{% endif %}
+{% endcall %}
+
+{{ ex.page_end() }}

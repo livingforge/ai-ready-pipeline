@@ -1,4 +1,4 @@
 # 機械生成（specdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
 title: 要件定義書
-output: 要件定義書.md
-template: requirement-spec.md.j2
+output: 要件定義書.html
+template: requirement-spec.html.j2

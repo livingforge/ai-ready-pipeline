@@ -1,0 +1,107 @@
+{#-
+  jp-sier-std 詳細設計書（Excel 風 HTML・自動生成）
+
+  基本設計書と体裁（_house-style）を揃えた納品用 HTML。非 abstract の台帳文書で
+  パラメータは任意（doc.get で受ける）。block 未使用のため block 規約の対象外。
+  ドメイン種別: module（クラス）/ method。refines・realizes・has-method を伴う。
+-#}
+{% import "_house-style.html.j2" as ex %}
+{% set modules = store.items_of('module') %}
+{{ ex.page_start(doc.title) }}
+
+{# ---- 表紙 ---- #}
+{{ ex.cover(doc.title, doc.get('doc_no', ''), doc.get('version', ''),
+            generated_at[:10], doc.get('org', '')) }}
+
+{# ---- 改訂履歴 ---- #}
+{% call ex.sheet('改訂履歴', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{% if data_history %}
+{% set rows = [] %}
+{% for h in data_history %}
+{% set _ = rows.append({'version': loop.index, 'date': h.date,
+    'note': (h.subject ~ '：' if h.subject and not h.initial else '') ~ h.summary
+            ~ '（' ~ (h.short if h.short else '未コミット') ~ '）',
+    'author': h.author}) %}
+{% endfor %}
+{{ ex.rev_history(rows) }}
+{% else %}
+{{ ex.rev_history([{'version': doc.get('version', '1.0'), 'date': generated_at[:10],
+    'note': '初版（データ版 ' ~ data_rev ~ ' から自動生成）', 'author': 'specdb'}]) }}
+{% endif %}
+{% endcall %}
+
+{# ---- 目次 ---- #}
+{% call ex.sheet('目次', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.toc([
+  {'no': '1',   'sheet': '1. モジュール一覧', 'desc': 'クラスの責務・レイヤ・パッケージ'},
+  {'no': '2',   'sheet': '2. メソッド仕様',   'desc': 'クラスごとのメソッドと処理概要・トレース'},
+  {'no': '付録', 'sheet': '付録 出典一覧',     'desc': 'モジュール・メソッドの出典'},
+]) }}
+{% endcall %}
+
+{# ---- 1. モジュール一覧 ---- #}
+{% call ex.sheet('1. モジュール一覧', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('1', 'モジュール一覧') }}
+<table class="xl">
+  <tr><th style="width:12%">モジュールID</th><th style="width:22%">クラス名</th>
+      <th style="width:12%">レイヤ</th><th style="width:22%">パッケージ</th><th>責務</th></tr>
+  {% for m in modules %}
+  <tr>
+    <td class="c">{{ m.attrs.module_id }}</td><td>{{ m.attrs.class_name }}</td>
+    <td class="c">{{ m.attrs.get('layer', '—') }}</td><td>{{ m.attrs.get('package', '—') }}</td>
+    <td>{{ m.attrs.description }}</td>
+  </tr>
+  {% endfor %}
+  {% if not modules %}<tr><td colspan="5">モジュールは登録されていません。</td></tr>{% endif %}
+</table>
+{% endcall %}
+
+{# ---- 2. メソッド仕様（モジュールごとに責務・トレース・メソッド表） ---- #}
+{% call ex.sheet('2. メソッド仕様', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('2', 'メソッド仕様') }}
+{% for m in modules %}
+{{ ex.subsec('2.' ~ loop.index, m.attrs.module_id ~ '　' ~ m.attrs.class_name) }}
+{% set realized = store.relations_of('realizes', src=m.id)|map(attribute='dst')|map('item_label')|join('、') %}
+{% set refined = store.relations_of('refines', src=m.id)|map(attribute='dst')|map('item_label')|join('、') %}
+{{ ex.kv([('責務', m.attrs.description),
+          ('レイヤ', m.attrs.get('layer', '—')),
+          ('パッケージ', m.attrs.get('package', '—')),
+          ('実現する要件', realized or '—'),
+          ('詳細化する基本設計', refined or '—')]) }}
+{% set methods = store.relations_of('has-method', src=m.id) %}
+{% if methods %}
+<table class="xl">
+  <tr><th style="width:12%">メソッドID</th><th style="width:40%">シグネチャ</th><th>説明</th></tr>
+  {% for h in methods %}
+  {% set mt = store.items[h.dst] %}
+  <tr>
+    <td class="c">{{ mt.attrs.method_id }}</td>
+    <td><code>{{ mt.attrs.signature }}</code></td>
+    <td>{{ mt.attrs.description }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+{{ ex.prose('処理仕様の記載があるメソッドはありません。') }}
+{% endif %}
+{% endfor %}
+{% if not modules %}{{ ex.prose('モジュールは登録されていません。') }}{% endif %}
+{% endcall %}
+
+{# ---- 付録 出典一覧（モジュール + メソッド） ---- #}
+{% call ex.sheet('付録 出典一覧', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('付録', '出典一覧') }}
+{% set rows = [] %}
+{% for m in modules %}
+{% if m.source %}{% set _ = rows.append({'name': m.label(mm), 'kind': mm.item_types[m.type].label,
+    'id': m.id, 'src': m.source}) %}{% endif %}
+{% for h in store.relations_of('has-method', src=m.id) %}
+{% set mt = store.items[h.dst] %}
+{% if mt.source %}{% set _ = rows.append({'name': mt.label(mm), 'kind': mm.item_types[mt.type].label,
+    'id': mt.id, 'src': mt.source}) %}{% endif %}
+{% endfor %}
+{% endfor %}
+{% if rows %}{{ ex.appendix_sources(rows) }}{% else %}{{ ex.prose('出典の登録はありません。') }}{% endif %}
+{% endcall %}
+
+{{ ex.page_end() }}

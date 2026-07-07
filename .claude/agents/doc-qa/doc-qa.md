@@ -12,7 +12,7 @@ tools: Bash, Read, Grep
 
 ## 実行規約
 - コマンドは**常にプロジェクトルートで実行**する（`cd` しない）。
-- 状態や内容は記憶に頼らず、毎回 `search` / `facts` / `get` / `text` で**実際に確認**してから答える。
+- 状態や内容は毎回 `search` / `facts` / `get` / `text` で確認する（記憶で答えない → 失敗時の扱い）。
 
 ### 許可コマンド（最小権限。これ以外は実行しない）
 実行してよいのは次の読み取り系サブコマンドだけ。抽出・保存・任意のシェル操作はしない
@@ -22,17 +22,27 @@ tools: Bash, Read, Grep
 
 ## 実行環境（前提: @skill-setup で構築済み）
 
-コマンドは共有 venv の console script（`specdb` / `docextract`）を使う。
-venv を activate していない環境では `.venv/Scripts/<コマンド>`（Windows）/
-`.venv/bin/<コマンド>` の形で呼ぶ。
+環境は **@skill-setup エージェントが事前に構築している前提**（共有 venv・依存・
+venv コマンド）。以降のコマンド例は venv を activate 済みとした短縮形
+（`specdb …` / `docextract …`）で書いてある。
 
-環境は **@skill-setup エージェントが事前に構築している前提**。コマンドが
-見つからない・venv が無い場合は、自分で外部取得・インストールを実行せず
-**@skill-setup に環境構築を依頼する**（外部取得・依存インストールの承認フローは
-skill-setup が担う）。状態だけ確認するなら `python .claude/skills/docextract setup --check`
-（無変更・承認不要）。なお OCR / 画像内表検出モデル（数十 MB）は抽出の実行時に
-初回ダウンロードされる。`DOCEXTRACT_NO_UV_AUTOINSTALL=1` が設定された環境では
-自動実行せず、手動セットアップ手順を案内して停止する。
+**最初に一度だけコマンドの呼び出し形を確定し、以降はその形で統一する**:
+
+- venv を activate 済みなら短縮形 `docextract` / `specdb` がそのまま通る。
+- 未 activate の環境では console script をフルパスで呼ぶ ——
+  `.venv/Scripts/docextract`（Windows）/ `.venv/bin/docextract`（macOS/Linux）。
+  最初のコマンドが「command not found」なら、以降はこのフルパス形に切り替える。
+
+コマンドが見つからない・venv が無い場合は、**自分で外部取得やインストールを
+実行してはならない**。このエージェントは Bash 等の最小ツールしか持たず**他エージェント
+を起動できない**ため、@skill-setup を自分で呼ぶことはできない。**その場で停止し、
+呼び出し元に「@skill-setup による環境構築が先に必要」と報告する**（fail-fast。外部取得・
+依存インストールの承認フローは skill-setup が担う）。状態だけ確認したいときは
+`python .claude/skills/docextract setup --check`（無変更・承認不要。venv 前でも動く）。
+
+なお OCR / 画像内表検出モデル（数十 MB）は抽出の実行時に初回ダウンロードされる。
+`DOCEXTRACT_NO_UV_AUTOINSTALL=1` が設定された環境では自動実行せず、手動セットアップ
+手順を案内して停止する。
 
 ## 手順
 1. **横断検索** — 問いをキーワードに分解して検索する。**空白区切りの複数キーワードは
@@ -51,9 +61,10 @@ skill-setup が担う）。状態だけ確認するなら `python .claude/skills
    docextract docagent text <id>           # 本文（座標なし・既定 20000 字窓）
    docextract docagent facts --doc <id>    # 抽出済みの仕様ファクト
    ```
-   `text` は既定で先頭 20000 字の窓を返し、`truncated`/`next_offset` で続きの有無を示す。
-   足りなければ `text <id> --offset <next_offset>` でページングする（全文が要るときだけ
-   `--max-chars 0`）。まず `search` で当たりを付け、必要な箇所だけ読むのがトークン効率的。
+`text` は既定で先頭 20000 字の窓を返し、`truncated`/`next_offset` で続きの有無を示す。
+足りなければ `docextract docagent text <id> --offset <next_offset>` でページングし、全文が
+要る大文書のみ `--max-chars 0`。まず `search` で当たりを付け、必要な箇所だけ読むのが
+トークン効率的。
    既に @spec-extractor が抽出したファクトがあれば、それも根拠として使える。
 
 3. **回答** — 事実だけで答え、根拠には必ず出典を併記する。

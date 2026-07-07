@@ -19,8 +19,9 @@ license: MIT
 - 正本は `.specdb/items/` と `.specdb/relations/`。`out/` は生成ビュー（直接編集しない）
 - 使える語彙（種別・属性・関係）は `.specdb/metamodel.yaml` の宣言がすべて
 - コマンドは venv の console script `specdb`（`--root` 省略時は自動でプロジェクトの
-  `.specdb` を使う。venv 未 activate なら `.venv/Scripts/specdb` の形）。
-  未 install の環境では `python .claude/skills/specdb <サブコマンド>` で同じ
+  `.specdb` を使う。venv 未 activate なら `.venv/Scripts/specdb`（Windows）/
+  `.venv/bin/specdb`（macOS/Linux）の形）。未 install の環境では
+  `python .claude/skills/specdb <サブコマンド>` で同じ
 - 棚卸し・ドリフト検出の規則は `.specdb/sync.yaml` に宣言されている
 
 ## 手順

@@ -1,4 +1,4 @@
 # 機械生成（specdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
-title: トレーサビリティ・マトリクス
-output: トレーサビリティ.md
-template: traceability-matrix.md.j2
+title: 要件・設計対応表
+output: 要件・設計対応表.html
+template: traceability-matrix.html.j2

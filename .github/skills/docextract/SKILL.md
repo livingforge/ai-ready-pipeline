@@ -46,9 +46,10 @@ DOCEXTRACT_AUTOINSTALL=1 python .github/skills/docextract setup
 ## Usage
 
 Commands below use the console script `docextract` (installed into the shared
-venv by the bootstrap above; call it as `.venv/Scripts/docextract` if the venv
-is not activated). It works from any directory inside the project. Before the
-venv exists, use `python .github/skills/docextract extract ...` instead — same interface.
+venv by the bootstrap above; call it as `.venv/Scripts/docextract` on Windows /
+`.venv/bin/docextract` on macOS/Linux if the venv is not activated). It works
+from any directory inside the project. Before the venv exists, use
+`python .github/skills/docextract extract ...` instead — same interface.
 
 > **Windows/PowerShell note.** A bare `.venv\Scripts\docextract` can be mistaken
 > for a PowerShell module (`CouldNotAutoLoadModule`). Invoke it with the call

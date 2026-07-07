@@ -1,4 +1,4 @@
 # 機械生成（specdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
 title: 詳細設計書
-output: 詳細設計書.md
-template: detail-design.md.j2
+output: 詳細設計書.html
+template: detail-design.html.j2
