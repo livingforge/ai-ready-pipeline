@@ -1,0 +1,19 @@
+# テスト検証トレース（V字の右側）— テストケース → 要件 / メソッド。
+# 未検証の要件（F-05,F-07 の一部, F-10, F-11, NFR 系）はカバレッジ・ギャップとして
+# テスト仕様書・対応表に現れる（想定内）。
+
+- { type: verifies, from: tc-u01, to: req-f02, status: review }
+- { type: verifies, from: tc-u01, to: mth-05, status: review }
+- { type: verifies, from: tc-u02, to: mth-06, status: review }
+- { type: verifies, from: tc-u03, to: req-f01, status: review }
+- { type: verifies, from: tc-u03, to: mth-04, status: review }
+- { type: verifies, from: tc-u04, to: req-f04, status: review }
+- { type: verifies, from: tc-u04, to: mth-02, status: review }
+- { type: verifies, from: tc-i01, to: req-f08, status: review }
+- { type: verifies, from: tc-i01, to: req-f02, status: review }
+- { type: verifies, from: tc-i02, to: req-f09, status: review }
+- { type: verifies, from: tc-i03, to: req-f06, status: review }
+- { type: verifies, from: tc-i03, to: req-f12, status: review }
+- { type: verifies, from: tc-i03, to: mth-07, status: review }
+- { type: verifies, from: tc-s01, to: req-f03, status: review }
+- { type: verifies, from: tc-s02, to: req-f07, status: review }

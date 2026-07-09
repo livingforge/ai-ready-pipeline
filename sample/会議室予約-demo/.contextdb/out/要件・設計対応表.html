@@ -154,7 +154,7 @@
   <div class="cover-body">
     <div class="cover-title">要件・設計対応表</div>
     <table class="cover-meta">
-<tr><th>発行日</th><td>2026-07-09</td></tr>    </table>
+<tr><th>発行日</th><td>2026-07-10</td></tr>    </table>
   </div>
 </section>
 
@@ -172,8 +172,8 @@
     <th>変更内容</th><th style="width:14%">変更者</th>
   </tr>
   <tr>
-    <td class="c">1.0</td><td class="c">2026-07-09</td>
-    <td>初版（データ版 unknown から自動生成）</td><td class="c">specdb</td>
+    <td class="c">1.0</td><td class="c">2026-07-10</td>
+    <td>初版（データ版 f69631a から自動生成）</td><td class="c">contextdb</td>
   </tr>
 </table>
 
@@ -190,10 +190,13 @@
   <table class="xl">
   <tr><th style="width:8%">章</th><th style="width:32%">内容</th><th>概要</th></tr>
   <tr class="goto" data-goto="1. 要件・設計対応">
-    <td class="c">1</td><td>1. 要件・設計対応</td><td>要件→基本設計→詳細設計→メソッドの対応（V字トレース）</td>
+    <td class="c">1</td><td>1. 要件・設計対応</td><td>要件→基本設計→詳細設計→メソッド→テストの対応（V字トレース）</td>
   </tr>
   <tr class="goto" data-goto="2. カバレッジ">
     <td class="c">2</td><td>2. カバレッジ</td><td>設計に落ちていない要件（ギャップ）の集計</td>
+  </tr>
+  <tr class="goto" data-goto="3. テスト検証">
+    <td class="c">3</td><td>3. テスト検証</td><td>テストで検証されていない要件（検証ギャップ）の集計</td>
   </tr>
 </table>
 <p class="hint">行をクリックすると該当シートへ移動します（画面下部のシートタブでも移動できます）。</p>
@@ -211,10 +214,11 @@
   <h2 class="sec">1　要件・設計対応</h2>
 <table class="xl">
   <tr>
-    <th style="width:26%">要件</th>
+    <th style="width:24%">要件</th>
     <th>実現する設計要素<br>(realizes)</th>
     <th>詳細化元の基本設計<br>(refines先)</th>
     <th>メソッド<br>(has-method)</th>
+    <th>検証するテスト<br>(verifies)</th>
     <th style="width:8%">状態</th>
   </tr>
   <tr>
@@ -222,28 +226,33 @@
     <td>空き状況照会<br>AvailabilityService</td>
     <td>空き状況照会</td>
     <td>AvailabilityService#searchAvailableRooms(SearchCond cond): List&lt;Room&gt;、AvailabilityService#isOverlapping(RoomId room, TimeSlot slot): boolean</td>
+    <td>空き会議室検索</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-02　予約登録〔機能〕</td>
     <td>予約入力<br>ReservationController<br>ReservationService<br>ReservationRepository<br>ReservationValidator</td>
     <td>予約入力、予約一覧、予約詳細・変更、予約</td>
     <td>ReservationService#createReservation(ReservationInput in): ReservationId、ReservationService#cancelReservation(ReservationId id, UserId by): void、ReservationService#changeReservation(ReservationId id, ReservationInput in): void、ReservationRepository#insert(Reservation r): void、ReservationValidator#validate(ReservationInput in): ValidationResult</td>
+    <td>予約重複チェック<br>空き照会から予約登録への遷移</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-03　予約変更〔機能〕</td>
     <td>予約詳細・変更<br>ReservationController<br>ReservationService</td>
     <td>予約入力、予約一覧、予約詳細・変更、予約</td>
     <td>ReservationService#createReservation(ReservationInput in): ReservationId、ReservationService#cancelReservation(ReservationId id, UserId by): void、ReservationService#changeReservation(ReservationId id, ReservationInput in): void</td>
+    <td>予約変更の一連業務</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-04　予約取消〔機能〕</td>
     <td>予約詳細・変更<br>ReservationController<br>ReservationService</td>
     <td>予約入力、予約一覧、予約詳細・変更、予約</td>
     <td>ReservationService#createReservation(ReservationInput in): ReservationId、ReservationService#cancelReservation(ReservationId id, UserId by): void、ReservationService#changeReservation(ReservationId id, ReservationInput in): void</td>
+    <td>予約取消の時間制約</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-05　予約一覧確認〔機能〕</td>
     <td>予約一覧</td>
+    <td>—</td>
     <td>—</td>
     <td>—</td>
 <td class="c st-approved">実現</td>  </tr>
@@ -252,28 +261,33 @@
     <td>承認待ち一覧<br>ApprovalService</td>
     <td>承認待ち一覧、承認</td>
     <td>ApprovalService#approve(ReservationId id, UserId approver): void</td>
+    <td>承認操作による予約確定</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-07　利用実績集計〔機能〕</td>
     <td>利用実績</td>
     <td>—</td>
     <td>—</td>
+    <td>利用実績集計</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-08　空き状況照会からの予約遷移〔機能〕</td>
     <td>空き状況照会</td>
     <td>—</td>
     <td>—</td>
+    <td>空き照会から予約登録への遷移</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-09　予約登録後の一覧遷移〔機能〕</td>
     <td>予約入力</td>
     <td>—</td>
     <td>—</td>
+    <td>予約登録後の一覧遷移</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-10　予約一覧から詳細への遷移〔機能〕</td>
     <td>予約一覧</td>
+    <td>—</td>
     <td>—</td>
     <td>—</td>
 <td class="c st-approved">実現</td>  </tr>
@@ -282,15 +296,18 @@
     <td>予約詳細・変更</td>
     <td>—</td>
     <td>—</td>
+    <td>—</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>F-12　承認操作と予約確定〔機能〕</td>
     <td>承認待ち一覧</td>
     <td>—</td>
     <td>—</td>
+    <td>承認操作による予約確定</td>
 <td class="c st-approved">実現</td>  </tr>
   <tr>
     <td>NFR-01　空き状況照会の応答時間〔非機能〕</td>
+    <td>—</td>
     <td>—</td>
     <td>—</td>
     <td>—</td>
@@ -300,9 +317,11 @@
     <td>—</td>
     <td>—</td>
     <td>—</td>
+    <td>—</td>
 <td class="c st-review">ギャップ</td>  </tr>
   <tr>
     <td>NFR-03　稼働時間〔非機能〕</td>
+    <td>—</td>
     <td>—</td>
     <td>—</td>
     <td>—</td>
@@ -312,9 +331,11 @@
     <td>—</td>
     <td>—</td>
     <td>—</td>
+    <td>—</td>
 <td class="c st-review">ギャップ</td>  </tr>
   <tr>
     <td>NFR-05　操作履歴の記録〔非機能〕</td>
+    <td>—</td>
     <td>—</td>
     <td>—</td>
     <td>—</td>
@@ -360,6 +381,63 @@
     <td class="c">NFR-05</td>
     <td>操作履歴の記録〔非機能〕</td>
     <td>realizes 関係なし（基本設計/詳細設計に未展開）</td>
+  </tr>
+</table>
+
+</section>
+
+<section class="sheet" data-name="3. テスト検証">
+  <table class="xl sheet-head">
+    <tr>
+      <th style="width:7%">文書名</th><td style="width:40%">要件・設計対応表</td>
+      <th style="width:7%">シート</th><td style="width:19%">3. テスト検証</td>
+    </tr>
+  </table>
+  <h2 class="sec">3　テスト検証</h2>
+<table class="xl kv">
+<tr><th>要件総数</th><td>17</td></tr><tr><th>テストで検証されている</th><td>9</td></tr><tr><th>検証ギャップ</th><td>8</td></tr></table>
+
+<table class="xl">
+  <tr><th style="width:14%">要件ID</th><th style="width:30%">要件名</th><th>状況</th></tr>
+  <tr class="st-review">
+    <td class="c">F-05</td>
+    <td>予約一覧確認〔機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  <tr class="st-review">
+    <td class="c">F-10</td>
+    <td>予約一覧から詳細への遷移〔機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  <tr class="st-review">
+    <td class="c">F-11</td>
+    <td>予約詳細からの取消遷移〔機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  <tr class="st-review">
+    <td class="c">NFR-01</td>
+    <td>空き状況照会の応答時間〔非機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  <tr class="st-review">
+    <td class="c">NFR-02</td>
+    <td>同時利用者数〔非機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  <tr class="st-review">
+    <td class="c">NFR-03</td>
+    <td>稼働時間〔非機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  <tr class="st-review">
+    <td class="c">NFR-04</td>
+    <td>利用環境・認証〔非機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  <tr class="st-review">
+    <td class="c">NFR-05</td>
+    <td>操作履歴の記録〔非機能〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
   </tr>
 </table>
 

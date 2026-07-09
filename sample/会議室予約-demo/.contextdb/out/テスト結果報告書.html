@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>要件定義書</title>
+<title>テスト結果報告書</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #b8bcc0;
@@ -152,7 +152,7 @@
 </table>
 </div>
   <div class="cover-body">
-    <div class="cover-title">要件定義書</div>
+    <div class="cover-title">テスト結果報告書</div>
     <table class="cover-meta">
 <tr><th>発行日</th><td>2026-07-10</td></tr>    </table>
   </div>
@@ -162,7 +162,7 @@
 <section class="sheet" data-name="改訂履歴">
   <table class="xl sheet-head">
     <tr>
-      <th style="width:7%">文書名</th><td style="width:40%">要件定義書</td>
+      <th style="width:7%">文書名</th><td style="width:40%">テスト結果報告書</td>
       <th style="width:7%">シート</th><td style="width:19%">改訂履歴</td>
     </tr>
   </table>
@@ -183,20 +183,23 @@
 <section class="sheet" data-name="目次">
   <table class="xl sheet-head">
     <tr>
-      <th style="width:7%">文書名</th><td style="width:40%">要件定義書</td>
+      <th style="width:7%">文書名</th><td style="width:40%">テスト結果報告書</td>
       <th style="width:7%">シート</th><td style="width:19%">目次</td>
     </tr>
   </table>
   <table class="xl">
   <tr><th style="width:8%">章</th><th style="width:32%">内容</th><th>概要</th></tr>
-  <tr class="goto" data-goto="1. 機能要件">
-    <td class="c">1</td><td>1. 機能要件</td><td>実現する設計要素つきの機能要件一覧</td>
+  <tr class="goto" data-goto="1. テスト実施サマリ">
+    <td class="c">1</td><td>1. テスト実施サマリ</td><td>レベル別の実施・合格・不合格・未実施と合格率</td>
   </tr>
-  <tr class="goto" data-goto="2. 非機能要件">
-    <td class="c">2</td><td>2. 非機能要件</td><td>性能・品質などの非機能要件一覧</td>
+  <tr class="goto" data-goto="2. テスト結果一覧">
+    <td class="c">2</td><td>2. テスト結果一覧</td><td>テストケースごとの最新結果（実施日・実施者・不具合）</td>
+  </tr>
+  <tr class="goto" data-goto="3. 要件別テスト結果">
+    <td class="c">3</td><td>3. 要件別テスト結果</td><td>要件→検証テスト→合否（V字トレースの閉じ）</td>
   </tr>
   <tr class="goto" data-goto="付録 出典一覧">
-    <td class="c">付録</td><td>付録 出典一覧</td><td>各要件の出典（元資料・箇所・原文）</td>
+    <td class="c">付録</td><td>付録 出典一覧</td><td>テスト結果の出典</td>
   </tr>
 </table>
 <p class="hint">行をクリックすると該当シートへ移動します（画面下部のシートタブでも移動できます）。</p>
@@ -204,111 +207,224 @@
 
 </section>
 
-<section class="sheet" data-name="1. 機能要件">
+<section class="sheet" data-name="1. テスト実施サマリ">
   <table class="xl sheet-head">
     <tr>
-      <th style="width:7%">文書名</th><td style="width:40%">要件定義書</td>
-      <th style="width:7%">シート</th><td style="width:19%">1. 機能要件</td>
+      <th style="width:7%">文書名</th><td style="width:40%">テスト結果報告書</td>
+      <th style="width:7%">シート</th><td style="width:19%">1. テスト実施サマリ</td>
     </tr>
   </table>
-  <h2 class="sec">1　機能要件</h2>
+  <h2 class="sec">1　テスト実施サマリ</h2>
 <table class="xl">
-  <tr><th style="width:12%">要件ID</th><th style="width:22%">要件名</th>
-      <th>内容</th><th style="width:26%">実現する設計要素</th></tr>
+  <tr><th style="width:12%">レベル</th><th>ケース数</th><th>実施済</th>
+      <th>合格</th><th>不合格</th><th>保留</th><th>未実施</th><th style="width:12%">合格率</th></tr>
   <tr>
-    <td class="c">F-01</td><td>空き状況照会</td>
-    <td>利用者は日付・時間帯・階を指定して、予約可能な会議室の一覧を表示できる</td>
-<td>空き状況照会、AvailabilityService</td>
+    <td class="c">単体</td><td class="num">4</td><td class="num">3</td>
+    <td class="num">3</td><td class="num">0</td><td class="num">0</td>
+    <td class="num">1</td>
+    <td class="c">100.0%</td>
   </tr>
   <tr>
-    <td class="c">F-02</td><td>予約登録</td>
-    <td>利用者は会議室・日時・利用人数・目的を入力して予約を登録できる</td>
-<td>予約入力、ReservationController、ReservationService、ReservationRepository、ReservationValidator</td>
+    <td class="c">結合</td><td class="num">3</td><td class="num">2</td>
+    <td class="num">1</td><td class="num">1</td><td class="num">0</td>
+    <td class="num">1</td>
+    <td class="c">50.0%</td>
   </tr>
   <tr>
-    <td class="c">F-03</td><td>予約変更</td>
-    <td>利用者は自分が登録した予約の時間や人数を変更できる</td>
-<td>予約詳細・変更、ReservationController、ReservationService</td>
+    <td class="c">総合</td><td class="num">2</td><td class="num">0</td>
+    <td class="num">0</td><td class="num">0</td><td class="num">0</td>
+    <td class="num">2</td>
+    <td class="c">—</td>
   </tr>
   <tr>
-    <td class="c">F-04</td><td>予約取消</td>
-    <td>利用者は自分が登録した予約を取消できる</td>
-<td>予約詳細・変更、ReservationController、ReservationService</td>
-  </tr>
-  <tr>
-    <td class="c">F-05</td><td>予約一覧確認</td>
-    <td>利用者は自分の予約、または会議室ごとの当日の予約を一覧で確認できる</td>
-<td>予約一覧</td>
-  </tr>
-  <tr>
-    <td class="c">F-06</td><td>予約承認・確定</td>
-    <td>一部の会議室（役員会議室など）の予約は、会議室管理者の承認があって初めて確定する</td>
-<td>承認待ち一覧、ApprovalService</td>
-  </tr>
-  <tr>
-    <td class="c">F-07</td><td>利用実績集計</td>
-    <td>会議室ごと・月ごとの予約件数と延べ利用時間を集計して表示できる</td>
-<td>利用実績</td>
-  </tr>
-  <tr>
-    <td class="c">F-08</td><td>空き状況照会からの予約遷移</td>
-    <td>空き状況照会で「予約する」を押すと予約入力へ遷移し、選択した会議室・日時を引き継ぐ</td>
-<td>空き状況照会</td>
-  </tr>
-  <tr>
-    <td class="c">F-09</td><td>予約登録後の一覧遷移</td>
-    <td>予約入力で「登録」を押すと予約一覧へ遷移する（重複時はエラー表示で留まる）</td>
-<td>予約入力</td>
-  </tr>
-  <tr>
-    <td class="c">F-10</td><td>予約一覧から詳細への遷移</td>
-    <td>予約一覧で明細を選ぶと予約詳細・変更へ遷移する</td>
-<td>予約一覧</td>
-  </tr>
-  <tr>
-    <td class="c">F-11</td><td>予約詳細からの取消遷移</td>
-    <td>予約詳細・変更で「取消」を押すと予約一覧へ遷移する</td>
-<td>予約詳細・変更</td>
-  </tr>
-  <tr>
-    <td class="c">F-12</td><td>承認操作と予約確定</td>
-    <td>承認待ち一覧で「承認」を押すと承認待ち一覧へ戻り、承認後に予約が確定する</td>
-<td>承認待ち一覧</td>
+    <th class="c">合計</th><td class="num">9</td><td class="num">5</td>
+    <td class="num">4</td><td class="num">1</td><td class="num">0</td>
+    <td class="num">4</td>
+    <td class="c">80.0%</td>
   </tr>
 </table>
 
 </section>
-<section class="sheet" data-name="2. 非機能要件">
+
+<section class="sheet" data-name="2. テスト結果一覧">
   <table class="xl sheet-head">
     <tr>
-      <th style="width:7%">文書名</th><td style="width:40%">要件定義書</td>
-      <th style="width:7%">シート</th><td style="width:19%">2. 非機能要件</td>
+      <th style="width:7%">文書名</th><td style="width:40%">テスト結果報告書</td>
+      <th style="width:7%">シート</th><td style="width:19%">2. テスト結果一覧</td>
     </tr>
   </table>
-  <h2 class="sec">2　非機能要件</h2>
+  <h2 class="sec">2　テスト結果一覧</h2>
 <table class="xl">
-  <tr><th style="width:12%">要件ID</th><th style="width:22%">要件名</th>
-      <th>内容</th><th style="width:26%">実現する設計要素</th></tr>
+  <tr><th style="width:10%">テストID</th><th style="width:8%">レベル</th><th style="width:26%">名称</th>
+      <th style="width:9%">結果</th><th style="width:12%">実施日</th><th style="width:13%">実施者</th><th>不具合</th></tr>
   <tr>
-    <td class="c">NFR-01</td><td>空き状況照会の応答時間</td>
-    <td>空き状況照会の応答は通常時2秒以内であること</td>
-<td class="st-review">⚠️ 未実現（カバレッジ・ギャップ）</td>  </tr>
+    <td class="c">TC-U01</td>
+    <td class="c">単体</td>
+    <td>予約重複チェック</td>
+    <td class="c st-approved">合格</td>
+    <td class="c">2026-07-08</td>
+    <td class="c">田中</td>
+    <td>—</td>
+  </tr>
   <tr>
-    <td class="c">NFR-02</td><td>同時利用者数</td>
-    <td>始業直後の混雑時に200名が同時に操作しても破綻しないこと</td>
-<td class="st-review">⚠️ 未実現（カバレッジ・ギャップ）</td>  </tr>
+    <td class="c">TC-U02</td>
+    <td class="c">単体</td>
+    <td>予約入力バリデーション</td>
+    <td class="c st-approved">合格</td>
+    <td class="c">2026-07-08</td>
+    <td class="c">田中</td>
+    <td>—</td>
+  </tr>
   <tr>
-    <td class="c">NFR-03</td><td>稼働時間</td>
-    <td>平日7:00〜22:00は停止しないこと（計画停止を除く）</td>
-<td class="st-review">⚠️ 未実現（カバレッジ・ギャップ）</td>  </tr>
+    <td class="c">TC-U03</td>
+    <td class="c">単体</td>
+    <td>空き会議室検索</td>
+    <td class="c st-approved">合格</td>
+    <td class="c">2026-07-09</td>
+    <td class="c">佐藤</td>
+    <td>—</td>
+  </tr>
   <tr>
-    <td class="c">NFR-04</td><td>利用環境・認証</td>
-    <td>社内ネットワークからのみ利用可能とし、社員番号と既存の認証基盤でログインする</td>
-<td class="st-review">⚠️ 未実現（カバレッジ・ギャップ）</td>  </tr>
+    <td class="c">TC-U04</td>
+    <td class="c">単体</td>
+    <td>予約取消の時間制約</td>
+    <td class="c st-draft">未実施</td><td class="c">—</td><td class="c">—</td><td>—</td>
+  </tr>
   <tr>
-    <td class="c">NFR-05</td><td>操作履歴の記録</td>
-    <td>予約の登録・変更・取消は、いつ・誰が行ったかを記録として残すこと</td>
-<td class="st-review">⚠️ 未実現（カバレッジ・ギャップ）</td>  </tr>
+    <td class="c">TC-I01</td>
+    <td class="c">結合</td>
+    <td>空き照会から予約登録への遷移</td>
+    <td class="c st-approved">合格</td>
+    <td class="c">2026-07-09</td>
+    <td class="c">鈴木</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td class="c">TC-I02</td>
+    <td class="c">結合</td>
+    <td>予約登録後の一覧遷移</td>
+    <td class="c st-draft">未実施</td><td class="c">—</td><td class="c">—</td><td>—</td>
+  </tr>
+  <tr>
+    <td class="c">TC-I03</td>
+    <td class="c">結合</td>
+    <td>承認操作による予約確定</td>
+    <td class="c st-review">不合格</td>
+    <td class="c">2026-07-09</td>
+    <td class="c">鈴木</td>
+    <td>BUG-102</td>
+  </tr>
+  <tr>
+    <td class="c">TC-S01</td>
+    <td class="c">総合</td>
+    <td>予約変更の一連業務</td>
+    <td class="c st-draft">未実施</td><td class="c">—</td><td class="c">—</td><td>—</td>
+  </tr>
+  <tr>
+    <td class="c">TC-S02</td>
+    <td class="c">総合</td>
+    <td>利用実績集計</td>
+    <td class="c st-draft">未実施</td><td class="c">—</td><td class="c">—</td><td>—</td>
+  </tr>
+</table>
+
+</section>
+
+<section class="sheet" data-name="3. 要件別テスト結果">
+  <table class="xl sheet-head">
+    <tr>
+      <th style="width:7%">文書名</th><td style="width:40%">テスト結果報告書</td>
+      <th style="width:7%">シート</th><td style="width:19%">3. 要件別テスト結果</td>
+    </tr>
+  </table>
+  <h2 class="sec">3　要件別テスト結果</h2>
+<table class="xl">
+  <tr><th style="width:24%">要件</th><th>検証するテスト（最新結果）</th><th style="width:12%">判定</th></tr>
+  <tr>
+    <td>F-01　空き状況照会〔機能〕</td>
+    <td>TC-U03：合格</td>
+<td class="c st-approved">合格</td>
+  </tr>
+  <tr>
+    <td>F-02　予約登録〔機能〕</td>
+    <td>TC-U01：合格、TC-I01：合格</td>
+<td class="c st-approved">合格</td>
+  </tr>
+  <tr>
+    <td>F-03　予約変更〔機能〕</td>
+    <td>TC-S01：未実施</td>
+<td class="c st-review">未実施あり</td>
+  </tr>
+  <tr>
+    <td>F-04　予約取消〔機能〕</td>
+    <td>TC-U04：未実施</td>
+<td class="c st-review">未実施あり</td>
+  </tr>
+  <tr>
+    <td>F-05　予約一覧確認〔機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
+  <tr>
+    <td>F-06　予約承認・確定〔機能〕</td>
+    <td>TC-I03：不合格</td>
+<td class="c st-review">不合格</td>
+  </tr>
+  <tr>
+    <td>F-07　利用実績集計〔機能〕</td>
+    <td>TC-S02：未実施</td>
+<td class="c st-review">未実施あり</td>
+  </tr>
+  <tr>
+    <td>F-08　空き状況照会からの予約遷移〔機能〕</td>
+    <td>TC-I01：合格</td>
+<td class="c st-approved">合格</td>
+  </tr>
+  <tr>
+    <td>F-09　予約登録後の一覧遷移〔機能〕</td>
+    <td>TC-I02：未実施</td>
+<td class="c st-review">未実施あり</td>
+  </tr>
+  <tr>
+    <td>F-10　予約一覧から詳細への遷移〔機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
+  <tr>
+    <td>F-11　予約詳細からの取消遷移〔機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
+  <tr>
+    <td>F-12　承認操作と予約確定〔機能〕</td>
+    <td>TC-I03：不合格</td>
+<td class="c st-review">不合格</td>
+  </tr>
+  <tr>
+    <td>NFR-01　空き状況照会の応答時間〔非機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
+  <tr>
+    <td>NFR-02　同時利用者数〔非機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
+  <tr>
+    <td>NFR-03　稼働時間〔非機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
+  <tr>
+    <td>NFR-04　利用環境・認証〔非機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
+  <tr>
+    <td>NFR-05　操作履歴の記録〔非機能〕</td>
+    <td>—</td>
+<td class="c st-review">未検証</td>
+  </tr>
 </table>
 
 </section>
@@ -316,7 +432,7 @@
 <section class="sheet" data-name="付録 出典一覧">
   <table class="xl sheet-head">
     <tr>
-      <th style="width:7%">文書名</th><td style="width:40%">要件定義書</td>
+      <th style="width:7%">文書名</th><td style="width:40%">テスト結果報告書</td>
       <th style="width:7%">シート</th><td style="width:19%">付録 出典一覧</td>
     </tr>
   </table>
@@ -327,89 +443,34 @@
     <th style="width:14%">ID</th><th style="width:24%">出典</th><th>原文</th>
   </tr>
   <tr>
-    <td>空き状況照会</td><td class="c">要件</td>
-    <td><span class="idtag">req-f01</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
+    <td>TR-01</td><td class="c">テスト結果</td>
+    <td><span class="idtag">tr-01</span></td>
+    <td>06_テスト仕様_xlsx_7e3c2f10 (sheet=実施結果)</td><td>—</td>
   </tr>
   <tr>
-    <td>予約登録</td><td class="c">要件</td>
-    <td><span class="idtag">req-f02</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
+    <td>TR-02</td><td class="c">テスト結果</td>
+    <td><span class="idtag">tr-02</span></td>
+    <td>06_テスト仕様_xlsx_7e3c2f10 (sheet=実施結果)</td><td>—</td>
   </tr>
   <tr>
-    <td>予約変更</td><td class="c">要件</td>
-    <td><span class="idtag">req-f03</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
+    <td>TR-03</td><td class="c">テスト結果</td>
+    <td><span class="idtag">tr-03</span></td>
+    <td>06_テスト仕様_xlsx_7e3c2f10 (sheet=実施結果)</td><td>—</td>
   </tr>
   <tr>
-    <td>予約取消</td><td class="c">要件</td>
-    <td><span class="idtag">req-f04</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
+    <td>TR-04</td><td class="c">テスト結果</td>
+    <td><span class="idtag">tr-04</span></td>
+    <td>06_テスト仕様_xlsx_7e3c2f10 (sheet=実施結果)</td><td>—</td>
   </tr>
   <tr>
-    <td>予約一覧確認</td><td class="c">要件</td>
-    <td><span class="idtag">req-f05</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
+    <td>TR-05</td><td class="c">テスト結果</td>
+    <td><span class="idtag">tr-05</span></td>
+    <td>06_テスト仕様_xlsx_7e3c2f10 (sheet=実施結果)</td><td>—</td>
   </tr>
   <tr>
-    <td>予約承認・確定</td><td class="c">要件</td>
-    <td><span class="idtag">req-f06</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
-  </tr>
-  <tr>
-    <td>利用実績集計</td><td class="c">要件</td>
-    <td><span class="idtag">req-f07</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
-  </tr>
-  <tr>
-    <td>空き状況照会からの予約遷移</td><td class="c">要件</td>
-    <td><span class="idtag">req-f08</span></td>
-    <td>02_画面一覧_項目_xlsx_29441a79 (sheet=画面遷移)</td><td>—</td>
-  </tr>
-  <tr>
-    <td>予約登録後の一覧遷移</td><td class="c">要件</td>
-    <td><span class="idtag">req-f09</span></td>
-    <td>02_画面一覧_項目_xlsx_29441a79 (sheet=画面遷移)</td><td>—</td>
-  </tr>
-  <tr>
-    <td>予約一覧から詳細への遷移</td><td class="c">要件</td>
-    <td><span class="idtag">req-f10</span></td>
-    <td>02_画面一覧_項目_xlsx_29441a79 (sheet=画面遷移)</td><td>—</td>
-  </tr>
-  <tr>
-    <td>予約詳細からの取消遷移</td><td class="c">要件</td>
-    <td><span class="idtag">req-f11</span></td>
-    <td>02_画面一覧_項目_xlsx_29441a79 (sheet=画面遷移)</td><td>—</td>
-  </tr>
-  <tr>
-    <td>承認操作と予約確定</td><td class="c">要件</td>
-    <td><span class="idtag">req-f12</span></td>
-    <td>02_画面一覧_項目_xlsx_29441a79 (sheet=画面遷移)</td><td>—</td>
-  </tr>
-  <tr>
-    <td>空き状況照会の応答時間</td><td class="c">要件</td>
-    <td><span class="idtag">req-nfr01</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
-  </tr>
-  <tr>
-    <td>同時利用者数</td><td class="c">要件</td>
-    <td><span class="idtag">req-nfr02</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
-  </tr>
-  <tr>
-    <td>稼働時間</td><td class="c">要件</td>
-    <td><span class="idtag">req-nfr03</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
-  </tr>
-  <tr>
-    <td>利用環境・認証</td><td class="c">要件</td>
-    <td><span class="idtag">req-nfr04</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
-  </tr>
-  <tr>
-    <td>操作履歴の記録</td><td class="c">要件</td>
-    <td><span class="idtag">req-nfr05</span></td>
-    <td>01_業務要求メモ_docx_9038bb5b</td><td>—</td>
+    <td>TR-06</td><td class="c">テスト結果</td>
+    <td><span class="idtag">tr-06</span></td>
+    <td>06_テスト仕様_xlsx_7e3c2f10 (sheet=実施結果)</td><td>—</td>
   </tr>
 </table>
 

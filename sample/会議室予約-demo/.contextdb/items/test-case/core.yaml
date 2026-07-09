@@ -1,0 +1,112 @@
+# テストケースの正本（テスト工程・設計）— 06_テスト仕様.xlsx の単体/結合/総合。
+# verifies で要件（F-xx）・メソッド（MTH-xx）を検証する。未検証の要件は対応表・
+# テスト仕様書のカバレッジ・ギャップとして可視化される（想定内）。
+
+- id: tc-u01
+  test_id: TC-U01
+  name: 予約重複チェック
+  level: 単体
+  precondition: 同一会議室・時間帯に既存予約がある
+  steps: 重複する時間帯で予約登録を実行する
+  expected: 重複エラーとなり登録されない
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 単体テスト
+- id: tc-u02
+  test_id: TC-U02
+  name: 予約入力バリデーション
+  level: 単体
+  precondition: 予約入力フォームを開いている
+  steps: 必須未入力・定員超過・時間長超過で登録する
+  expected: 検証違反が返り登録されない
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 単体テスト
+- id: tc-u03
+  test_id: TC-U03
+  name: 空き会議室検索
+  level: 単体
+  precondition: 会議室と既存予約が登録済み
+  steps: 日付・階・時間帯を条件に検索する
+  expected: 条件に合う空き会議室のみ返る
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 単体テスト
+- id: tc-u04
+  test_id: TC-U04
+  name: 予約取消の時間制約
+  level: 単体
+  precondition: 開始1時間前を過ぎた予約がある
+  steps: 予約者本人が取消を実行する
+  expected: 取消不可エラーとなる
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 単体テスト
+- id: tc-i01
+  test_id: TC-I01
+  name: 空き照会から予約登録への遷移
+  level: 結合
+  precondition: 利用者がログイン済み
+  steps: 空き状況照会→対象選択→予約登録と操作する
+  expected: 予約が登録され一覧に反映される
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 結合テスト
+- id: tc-i02
+  test_id: TC-I02
+  name: 予約登録後の一覧遷移
+  level: 結合
+  precondition: 予約登録が完了した直後
+  steps: 登録完了画面から一覧へ遷移する
+  expected: 登録した予約が一覧の最上部に表示される
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 結合テスト
+- id: tc-i03
+  test_id: TC-I03
+  name: 承認操作による予約確定
+  level: 結合
+  precondition: 特別会議室の仮予約がある
+  steps: 承認者が承認操作を行う
+  expected: 仮予約が確定状態になる
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 結合テスト
+- id: tc-s01
+  test_id: TC-S01
+  name: 予約変更の一連業務
+  level: 総合
+  precondition: 確定済みの予約がある
+  steps: 予約変更→再検証→確定まで通しで実施する
+  expected: 変更後の内容で予約が確定する
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 総合テスト
+- id: tc-s02
+  test_id: TC-S02
+  name: 利用実績集計
+  level: 総合
+  precondition: 期間内に予約実績がある
+  steps: 月次で利用実績を集計する
+  expected: 会議室別の利用時間が正しく集計される
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 総合テスト

@@ -1,0 +1,10 @@
+# テスト実行トレース — テスト結果 → テストケース（from 多重度 1）。
+# TC-U03 は TR-03(不合格)→TR-04(合格) の2回実行。未実施のケース
+# （TC-U04, TC-I02, TC-S01, TC-S02）は executes を持たず「未実施」となる。
+
+- { type: executes, from: tr-01, to: tc-u01, status: review }
+- { type: executes, from: tr-02, to: tc-u02, status: review }
+- { type: executes, from: tr-03, to: tc-u03, status: review }
+- { type: executes, from: tr-04, to: tc-u03, status: review }
+- { type: executes, from: tr-05, to: tc-i01, status: review }
+- { type: executes, from: tr-06, to: tc-i03, status: review }

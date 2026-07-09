@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>contextdb ビューア</title>
+</head>
+<body>
+<style>
+:root {
+  --bg: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e;
+  --muted: #898781; --hairline: #e1e0d9; --border: rgba(11,11,11,.10);
+  --edge: #c3c2b7; --edge-hi: #52514e;
+  --accent: #2a78d6; --err: #d03b3b; --warn: #fab219; --good: #0ca30c;
+  --halo: #fcfcfb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
+    --muted: #898781; --hairline: #2c2c2a; --border: rgba(255,255,255,.10);
+    --edge: #494944; --edge-hi: #c3c2b7;
+    --accent: #3987e5; --err: #d03b3b; --warn: #fab219; --good: #0ca30c;
+    --halo: #1a1a19;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e;
+  --muted: #898781; --hairline: #e1e0d9; --border: rgba(11,11,11,.10);
+  --edge: #c3c2b7; --edge-hi: #52514e;
+  --accent: #2a78d6; --err: #d03b3b; --warn: #fab219; --good: #0ca30c;
+  --halo: #fcfcfb;
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
+  --muted: #898781; --hairline: #2c2c2a; --border: rgba(255,255,255,.10);
+  --edge: #494944; --edge-hi: #c3c2b7;
+  --accent: #3987e5; --err: #d03b3b; --warn: #fab219; --good: #0ca30c;
+  --halo: #1a1a19;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Hiragino Sans",
+        "Yu Gothic UI", "Meiryo", sans-serif;
+}
+#app { display: grid; grid-template-rows: auto 1fr; height: 100vh; min-height: 480px; }
+header {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
+}
+header h1 { font-size: 15px; font-weight: 650; margin: 0; }
+header .meta { color: var(--muted); font-size: 11.5px; }
+header .stats { display: flex; gap: 14px; margin-left: auto; font-variant-numeric: tabular-nums; }
+header .stat { display: flex; align-items: baseline; gap: 5px; }
+header .stat b { font-size: 15px; font-weight: 650; }
+header .stat span { color: var(--muted); font-size: 11px; }
+header .stat.err b { color: var(--err); }
+header .stat.warn b { color: var(--warn); }
+header .stat.zero b { color: var(--good); }
+header .stat.rev b { color: var(--accent); }
+#cols { display: grid; grid-template-columns: 232px 1fr 300px; min-height: 0; }
+@media (max-width: 900px) { #cols { grid-template-columns: 200px 1fr; } #detail { display: none; } }
+.panel { overflow-y: auto; background: var(--surface); }
+#side { border-right: 1px solid var(--hairline); padding: 12px; }
+#detail { border-left: 1px solid var(--hairline); padding: 14px; }
+.sec { margin-bottom: 16px; }
+.sec > h2 {
+  font-size: 10.5px; font-weight: 650; letter-spacing: .08em; color: var(--muted);
+  text-transform: uppercase; margin: 0 0 6px;
+}
+#q {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--hairline); border-radius: 6px;
+  background: var(--bg); color: var(--ink); font: inherit;
+}
+#q:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chk { display: flex; align-items: center; gap: 7px; padding: 3px 2px; cursor: pointer;
+       border-radius: 5px; user-select: none; }
+.chk:hover { background: var(--bg); }
+.chk input { margin: 0; accent-color: var(--accent); }
+.chk .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.chk .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chk.rel .sw { height: 2px; border-radius: 1px; background: var(--edge-hi); }
+.chk .sw.st { border-radius: 50%; background: var(--muted); }
+.chk .sw.st-review { background: transparent; border: 2px dashed var(--accent); }
+.chk .sw.st-deprecated { background: transparent; border: 1px dashed var(--muted);
+  opacity: .7; }
+#problems .p { display: flex; gap: 6px; padding: 4px 6px; border-radius: 5px;
+               cursor: pointer; align-items: baseline; }
+#problems .p:hover { background: var(--bg); }
+#problems .p .lv { flex: none; font-size: 10px; font-weight: 700; padding: 0 5px;
+                   border-radius: 8px; color: #fff; }
+#problems .p .lv.error { background: var(--err); }
+#problems .p .lv.warn { background: var(--warn); color: #1a1a19; }
+#problems .p .tx { color: var(--ink-2); font-size: 11.5px; }
+#problems .empty { color: var(--good); font-size: 12px; }
+#stage { position: relative; min-width: 0; background: var(--bg); }
+#toolbar { position: absolute; top: 10px; left: 12px; z-index: 4; display: flex; gap: 6px; }
+#toolbar button, #toolbar label {
+  border: 1px solid var(--hairline); background: var(--surface); color: var(--ink-2);
+  border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+}
+#toolbar button:hover, #toolbar label:hover { color: var(--ink); border-color: var(--muted); }
+#toolbar button:focus-visible { outline: 2px solid var(--accent); }
+#toolbar .on { color: var(--ink); border-color: var(--accent); }
+#toolbar button:disabled { opacity: .45; cursor: default; }
+#toolbar button:disabled:hover { color: var(--ink-2); border-color: var(--hairline); }
+#svg { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#svg.panning { cursor: grabbing; }
+.link { stroke: var(--edge); stroke-width: 1.5; fill: none; }
+.link.hi { stroke: var(--edge-hi); stroke-width: 2; }
+.link.dim { opacity: .12; }
+.link.st-review { stroke-dasharray: 6 4; }
+.link.st-deprecated { stroke-dasharray: 2 3; opacity: .4; }
+.node { cursor: pointer; }
+.node circle { stroke: var(--halo); stroke-width: 1.5; }
+.node.st-review circle:not(.ring) { stroke: var(--accent); stroke-width: 2;
+  stroke-dasharray: 4 3; }
+.node.st-deprecated { opacity: .45; }
+.node.st-deprecated circle { stroke-dasharray: 3 2; }
+.node.dim { opacity: .14; }
+.node.sel circle:not(.ring) { stroke: var(--accent); stroke-width: 3;
+  stroke-dasharray: none; }
+.node text {
+  font-size: 11px; fill: var(--ink); paint-order: stroke; stroke: var(--halo);
+  stroke-width: 3px; stroke-linejoin: round; pointer-events: none;
+}
+.node .ring { fill: none; stroke-width: 2.5; }
+.edgelabel { font-size: 9.5px; fill: var(--muted); paint-order: stroke;
+             stroke: var(--halo); stroke-width: 2.5px; pointer-events: none; }
+#tip {
+  position: absolute; z-index: 6; pointer-events: none; display: none; max-width: 320px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+  padding: 7px 10px; font-size: 11.5px; color: var(--ink-2);
+  box-shadow: 0 4px 14px rgba(0,0,0,.18);
+}
+#tip b { color: var(--ink); }
+#tableview { display: none; overflow: auto; height: 100%; padding: 14px; }
+#tableview table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#tableview th, #tableview td { text-align: left; padding: 5px 10px;
+  border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+#tableview th { color: var(--muted); font-size: 10.5px; letter-spacing: .06em;
+  text-transform: uppercase; position: sticky; top: 0; background: var(--bg); }
+#tableview tr { cursor: pointer; }
+#tableview tbody tr:hover { background: var(--surface); }
+#tableview .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px;
+  margin-right: 6px; vertical-align: baseline; }
+#detail .placeholder { color: var(--muted); }
+#detail h3 { margin: 2px 0 2px; font-size: 15px; line-height: 1.35; }
+#detail .idline { color: var(--muted); font-size: 11px; font-family: ui-monospace,
+  Consolas, monospace; margin-bottom: 8px; word-break: break-all; }
+.chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--hairline);
+  border-radius: 10px; padding: 1px 8px; font-size: 11px; color: var(--ink-2); }
+.chip .sw { width: 9px; height: 9px; border-radius: 3px; }
+.pill { display: inline-block; border-radius: 10px; padding: 1px 8px; font-size: 11px;
+  border: 1px solid var(--hairline); color: var(--ink-2); }
+.pill.approved { color: var(--good); border-color: var(--good); }
+.pill.review { color: var(--accent); border-color: var(--accent); }
+.pill.deprecated { text-decoration: line-through; }
+#detail table.attrs { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+#detail table.attrs td { padding: 3px 6px 3px 0; vertical-align: top;
+  border-bottom: 1px solid var(--hairline); }
+#detail table.attrs td.k { color: var(--muted); white-space: nowrap; width: 1%;
+  padding-right: 12px; }
+#detail table.attrs td.v { word-break: break-word; }
+#detail .src { border-left: 3px solid var(--hairline); padding: 2px 0 2px 10px;
+  margin: 6px 0; font-size: 11.5px; color: var(--ink-2); }
+#detail .src .ev { color: var(--muted); font-style: italic; }
+#detail .relrow { padding: 3px 0; font-size: 12px; }
+#detail .relrow a { color: var(--accent); text-decoration: none; cursor: pointer; }
+#detail .relrow a:hover { text-decoration: underline; }
+#detail .relrow .rl { color: var(--muted); }
+#detail .prob { font-size: 11.5px; padding: 4px 8px; border-radius: 6px; margin: 4px 0; }
+#detail .prob.error { background: color-mix(in srgb, var(--err) 12%, transparent);
+  color: var(--err); }
+#detail .prob.warn { background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--ink-2); }
+</style>
+
+<div id="app">
+  <header>
+    <h1>contextdb ビューア</h1>
+    <span class="meta" id="meta"></span>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div id="cols">
+    <nav class="panel" id="side">
+      <div class="sec"><input id="q" type="search" placeholder="検索 (ラベル / ID)"
+        aria-label="ノード検索"></div>
+      <div class="sec"><h2>アイテム種別</h2><div id="ftypes"></div></div>
+      <div class="sec"><h2>関係種別</h2><div id="frels"></div></div>
+      <div class="sec"><h2>状態</h2><div id="fstatus"></div></div>
+      <div class="sec"><h2>検証</h2><div id="problems"></div></div>
+    </nav>
+    <main id="stage">
+      <div id="toolbar">
+        <button id="btnFit" type="button">全体表示</button>
+        <button id="btnRelayout" type="button">再レイアウト</button>
+        <button id="btnLabels" type="button">関係ラベル</button>
+        <button id="btnReview" type="button">レビュー中</button>
+        <button id="btnTable" type="button">一覧表示</button>
+      </div>
+      <svg id="svg" role="img" aria-label="仕様アイテムの関係グラフ">
+        <defs>
+          <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7"
+            markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0.6 L7.4,4 L0,7.4 Z" fill="var(--edge)"></path>
+          </marker>
+          <marker id="arrHi" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7"
+            markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0.6 L7.4,4 L0,7.4 Z" fill="var(--edge-hi)"></path>
+          </marker>
+        </defs>
+        <g id="viewport">
+          <g id="glinks"></g><g id="glabels"></g><g id="gnodes"></g>
+        </g>
+      </svg>
+      <div id="tableview"></div>
+      <div id="tip"></div>
+    </main>
+    <aside class="panel" id="detail">
+      <div class="placeholder">ノードまたはエッジを選択すると、属性・出典・関係が
+        ここに表示されます。</div>
+    </aside>
+  </div>
+</div>
+
+<script type="application/json" id="contextdb-data">{"root": ".contextdb", "rev": "f69631a", "generatedAt": "2026-07-10T00:55:39+09:00", "itemTypes": [{"name": "requirement", "label": "要件", "color": "#2a78d6", "colorDark": "#3987e5"}, {"name": "screen", "label": "画面", "color": "#1baf7a", "colorDark": "#199e70"}, {"name": "entity", "label": "エンティティ", "color": "#eda100", "colorDark": "#c98500"}, {"name": "data-item", "label": "データ項目", "color": "#008300", "colorDark": "#008300"}, {"name": "business-rule", "label": "業務ルール", "color": "#4a3aa7", "colorDark": "#9085e9"}, {"name": "external-interface", "label": "外部インターフェース", "color": "#e34948", "colorDark": "#e66767"}, {"name": "module", "label": "モジュール", "color": "#e87ba4", "colorDark": "#d55181"}, {"name": "method", "label": "メソッド", "color": "#eb6834", "colorDark": "#d95926"}, {"name": "test-case", "label": "テストケース", "color": "#898781", "colorDark": "#898781"}, {"name": "test-run", "label": "テスト結果", "color": "#898781", "colorDark": "#898781"}, {"name": "constraint", "label": "制約・前提", "color": "#898781", "colorDark": "#898781"}, {"name": "term", "label": "用語", "color": "#898781", "colorDark": "#898781"}], "relationTypes": [{"name": "has-column", "label": "列"}, {"name": "displays", "label": "表示する"}, {"name": "constrains", "label": "制約する"}, {"name": "interfaces", "label": "連携する"}, {"name": "realizes", "label": "実現する"}, {"name": "refines", "label": "詳細化する"}, {"name": "has-method", "label": "メソッド"}, {"name": "verifies", "label": "検証する"}, {"name": "executes", "label": "実行する"}, {"name": "enforces", "label": "実装する（業務ルール）"}], "items": [{"id": "br-001", "type": "business-rule", "label": "同一会議室・同一時間帯の重複予約を禁止する", "status": "review", "attrs": {"rule_id": "BR-001", "statement": "同一会議室・同一時間帯の重複予約を禁止する"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}, {"doc": "01_業務要求メモ_docx_9038bb5b"}, {"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "br-002", "type": "business-rule", "label": "予約可能な時間帯は平日 8:00〜21:00 に限る", "status": "review", "attrs": {"rule_id": "BR-002", "statement": "予約可能な時間帯は平日 8:00〜21:00 に限る"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}, {"doc": "01_業務要求メモ_docx_9038bb5b"}, {"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"id": "br-003", "type": "business-rule", "label": "1 件の予約時間は最長 4 時間までとする", "status": "review", "attrs": {"rule_id": "BR-003", "statement": "1 件の予約時間は最長 4 時間までとする"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}, {"doc": "01_業務要求メモ_docx_9038bb5b"}, {"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"id": "br-004", "type": "business-rule", "label": "利用人数は会議室の定員を超えてはならない", "status": "review", "attrs": {"rule_id": "BR-004", "statement": "利用人数は会議室の定員を超えてはならない"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}, {"doc": "01_業務要求メモ_docx_9038bb5b"}, {"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}, {"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "br-005", "type": "business-rule", "label": "取消・変更は開始時刻の 1 時間前までに限る", "status": "review", "attrs": {"rule_id": "BR-005", "statement": "取消・変更は開始時刻の 1 時間前までに限る"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}, {"doc": "01_業務要求メモ_docx_9038bb5b"}, {"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "br-006", "type": "business-rule", "label": "種別が「特別」の会議室は、承認されるまで予約が確定しない", "status": "review", "attrs": {"rule_id": "BR-006", "statement": "種別が「特別」の会議室は、承認されるまで予約が確定しない"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}, {"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "br-007", "type": "business-rule", "label": "取消・変更ができるのは予約者本人と会議室管理者のみ", "status": "review", "attrs": {"rule_id": "BR-007", "statement": "取消・変更ができるのは予約者本人と会議室管理者のみ"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}, {"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "br-008", "type": "business-rule", "label": "予約ID（RSV_ID）は「RSV＋連番」で採番する", "status": "review", "attrs": {"rule_id": "BR-008", "statement": "予約ID（RSV_ID）は「RSV＋連番」で採番する"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "br-009", "type": "business-rule", "label": "会議室の階（FLOOR_NO）は 3〜8 の範囲である", "status": "review", "attrs": {"rule_id": "BR-009", "statement": "会議室の階（FLOOR_NO）は 3〜8 の範囲である"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "会議室"}}, {"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "br-010", "type": "business-rule", "label": "IF-01 で取り込んだ社員のみがログインでき、予約できる", "status": "review", "attrs": {"rule_id": "BR-010", "statement": "IF-01 で取り込んだ社員のみがログインでき、予約できる"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"id": "br-011", "type": "business-rule", "label": "退職者は社員マスタ取り込み対象から外れるため、翌営業日以降はログインできなくなる", "status": "review", "attrs": {"rule_id": "BR-011", "statement": "退職者は社員マスタ取り込み対象から外れるため、翌営業日以降はログインできなくなる"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"id": "con-0001", "type": "constraint", "label": "対象は本社ビル3〜8階の会議室（全24室）である", "status": "review", "attrs": {"statement": "対象は本社ビル3〜8階の会議室（全24室）である"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "con-0002", "type": "constraint", "label": "社員情報は既存の社員マスタから取り込み、本システムでは社員を新規登録しない", "status": "review", "attrs": {"statement": "社員情報は既存の社員マスタから取り込み、本システムでは社員を新規登録しない"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "di-room-id", "type": "data-item", "label": "会議室ID", "status": "review", "attrs": {"name": "会議室ID", "type": "文字列", "length": 8, "domain": "例: R305", "description": "会議室を一意に識別するID。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "会議室"}}]}, {"id": "di-room-name", "type": "data-item", "label": "会議室名", "status": "review", "attrs": {"name": "会議室名", "type": "文字列", "length": 40, "description": "会議室の名称。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "会議室"}}]}, {"id": "di-floor-no", "type": "data-item", "label": "階", "status": "review", "attrs": {"name": "階", "type": "数値", "length": 2, "domain": "3〜8", "description": "会議室の所在階。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "会議室"}}]}, {"id": "di-capacity", "type": "data-item", "label": "定員", "status": "review", "attrs": {"name": "定員", "type": "数値", "length": 3, "description": "着席可能な人数。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "会議室"}}]}, {"id": "di-room-type", "type": "data-item", "label": "種別", "status": "review", "attrs": {"name": "種別", "type": "文字列", "length": 4, "domain": "一般 / 特別", "description": "会議室の種別。特別は承認が必要。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "会議室"}}]}, {"id": "di-rsv-id", "type": "data-item", "label": "予約ID", "status": "review", "attrs": {"name": "予約ID", "type": "文字列", "length": 12, "domain": "RSV＋連番", "description": "予約を一意に識別するID。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "di-use-date", "type": "data-item", "label": "利用日", "status": "review", "attrs": {"name": "利用日", "type": "日付", "description": "予約対象の利用日。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "di-start-time", "type": "data-item", "label": "開始時刻", "status": "review", "attrs": {"name": "開始時刻", "type": "文字列", "length": 5, "domain": "HH:MM", "description": "予約の開始時刻。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "di-end-time", "type": "data-item", "label": "終了時刻", "status": "review", "attrs": {"name": "終了時刻", "type": "文字列", "length": 5, "domain": "HH:MM", "description": "予約の終了時刻。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "di-headcount", "type": "data-item", "label": "利用人数", "status": "review", "attrs": {"name": "利用人数", "type": "数値", "length": 3, "description": "予約の利用人数。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "di-purpose", "type": "data-item", "label": "利用目的", "status": "review", "attrs": {"name": "利用目的", "type": "文字列", "length": 40, "description": "予約の利用目的。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "di-user-id", "type": "data-item", "label": "利用者ID", "status": "review", "attrs": {"name": "利用者ID", "type": "文字列", "length": 8, "description": "社員番号。社員マスタ由来で、予約では予約者を表す。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "利用者"}}]}, {"id": "di-status", "type": "data-item", "label": "状態", "status": "review", "attrs": {"name": "状態", "type": "文字列", "length": 6, "domain": "仮予約 / 確定 / 取消", "description": "予約の状態。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "di-user-name", "type": "data-item", "label": "氏名", "status": "review", "attrs": {"name": "氏名", "type": "文字列", "length": 40, "description": "利用者の氏名。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "利用者"}}]}, {"id": "di-dept-name", "type": "data-item", "label": "所属部署", "status": "review", "attrs": {"name": "所属部署", "type": "文字列", "length": 40, "description": "利用者の所属部署（任意）。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "利用者"}}]}, {"id": "di-mail", "type": "data-item", "label": "メールアドレス", "status": "review", "attrs": {"name": "メールアドレス", "type": "文字列", "length": 80, "description": "通知先メールアドレス（任意）。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "利用者"}}]}, {"id": "di-apv-id", "type": "data-item", "label": "承認ID", "status": "review", "attrs": {"name": "承認ID", "type": "文字列", "length": 12, "description": "承認記録を一意に識別するID。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "承認"}}]}, {"id": "di-approver-id", "type": "data-item", "label": "承認者ID", "status": "review", "attrs": {"name": "承認者ID", "type": "文字列", "length": 8, "description": "承認を行った会議室管理者のID。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "承認"}}]}, {"id": "di-result", "type": "data-item", "label": "承認結果", "status": "review", "attrs": {"name": "承認結果", "type": "文字列", "length": 4, "domain": "承認 / 却下", "description": "承認の結果。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "承認"}}]}, {"id": "di-apv-time", "type": "data-item", "label": "承認日時", "status": "review", "attrs": {"name": "承認日時", "type": "日付", "description": "承認を行った日時（任意）。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "承認"}}]}, {"id": "di-biko", "type": "data-item", "label": "備考", "status": "review", "attrs": {"name": "備考", "type": "文字列", "length": 100, "description": "予約入力の備考（任意、全角100文字以内）。"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"id": "ent-room", "type": "entity", "label": "会議室", "status": "review", "attrs": {"name": "会議室", "physical_name": "MRR_ROOM", "description": "予約対象の会議室マスタである。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "会議室"}}]}, {"id": "ent-reservation", "type": "entity", "label": "予約", "status": "review", "attrs": {"name": "予約", "physical_name": "MRR_RESERVATION", "description": "会議室の予約1件を表す。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "予約"}}]}, {"id": "ent-user", "type": "entity", "label": "利用者", "status": "review", "attrs": {"name": "利用者", "physical_name": "MRR_USER", "description": "社員マスタから取り込んだ利用者を表す。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "利用者"}}]}, {"id": "ent-approval", "type": "entity", "label": "承認", "status": "review", "attrs": {"name": "承認", "physical_name": "MRR_APPROVAL", "description": "特別会議室予約の承認記録である。"}, "source": [{"doc": "03_データ項目_テーブル_xlsx_f9a3a2ad", "location": {"sheet": "承認"}}]}, {"id": "if-01", "type": "external-interface", "label": "社員マスタ連携", "status": "review", "attrs": {"name": "社員マスタ連携", "if_id": "IF-01", "direction": "入力", "protocol": "日次バッチ・CSV", "description": "人事の社員マスタから在籍者を取り込み、利用者を更新する。"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"id": "if-02", "type": "external-interface", "label": "予約確定通知", "status": "review", "attrs": {"name": "予約確定通知", "if_id": "IF-02", "direction": "出力", "protocol": "メール", "description": "予約が確定した時点で予約者へメールを都度送信する。"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"id": "if-03", "type": "external-interface", "label": "館内サイネージ連携", "status": "review", "attrs": {"name": "館内サイネージ連携", "if_id": "IF-03", "direction": "出力", "protocol": "API（5分間隔）", "description": "当日の会議室ごとの予約状況を館内サイネージへ送信する。"}, "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"id": "mth-01", "type": "method", "label": "ReservationService#createReservation(ReservationInput in): ReservationId", "status": "review", "attrs": {"method_id": "MTH-01", "signature": "ReservationService#createReservation(ReservationInput in): ReservationId", "description": "入力を検証し、重複がなければ予約を登録する。特別会議室なら仮予約とする。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mth-02", "type": "method", "label": "ReservationService#cancelReservation(ReservationId id, UserId by): void", "status": "review", "attrs": {"method_id": "MTH-02", "signature": "ReservationService#cancelReservation(ReservationId id, UserId by): void", "description": "予約者本人または管理者が開始1時間前までに取消する。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mth-03", "type": "method", "label": "ReservationService#changeReservation(ReservationId id, ReservationInput in): void", "status": "review", "attrs": {"method_id": "MTH-03", "signature": "ReservationService#changeReservation(ReservationId id, ReservationInput in): void", "description": "既存予約を変更し、変更後の内容を再度検証する。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mth-04", "type": "method", "label": "AvailabilityService#searchAvailableRooms(SearchCond cond): List<Room>", "status": "review", "attrs": {"method_id": "MTH-04", "signature": "AvailabilityService#searchAvailableRooms(SearchCond cond): List<Room>", "description": "日付・階・時間帯を条件に空いている会議室を返す。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mth-05", "type": "method", "label": "AvailabilityService#isOverlapping(RoomId room, TimeSlot slot): boolean", "status": "review", "attrs": {"method_id": "MTH-05", "signature": "AvailabilityService#isOverlapping(RoomId room, TimeSlot slot): boolean", "description": "指定会議室・時間帯に既存予約が重なるかを判定する。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mth-06", "type": "method", "label": "ReservationValidator#validate(ReservationInput in): ValidationResult", "status": "review", "attrs": {"method_id": "MTH-06", "signature": "ReservationValidator#validate(ReservationInput in): ValidationResult", "description": "必須・桁・定員・時間帯・時間長を検証し違反を返す。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mth-07", "type": "method", "label": "ApprovalService#approve(ReservationId id, UserId approver): void", "status": "review", "attrs": {"method_id": "MTH-07", "signature": "ApprovalService#approve(ReservationId id, UserId approver): void", "description": "承認者が仮予約を確定にし、却下時は取消にする。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mth-08", "type": "method", "label": "ReservationRepository#insert(Reservation r): void", "status": "review", "attrs": {"method_id": "MTH-08", "signature": "ReservationRepository#insert(Reservation r): void", "description": "予約1件を予約テーブルへ登録する。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"id": "mod-01", "type": "module", "label": "ReservationController", "status": "review", "attrs": {"module_id": "MOD-01", "class_name": "ReservationController", "layer": "Controller", "package": "app.reservation.web", "description": "予約系の画面リクエストを受けサービスへ委譲する。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"id": "mod-02", "type": "module", "label": "ReservationService", "status": "review", "attrs": {"module_id": "MOD-02", "class_name": "ReservationService", "layer": "Service", "package": "app.reservation.service", "description": "予約の登録・変更・取消の業務ロジックを担う。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"id": "mod-03", "type": "module", "label": "AvailabilityService", "status": "review", "attrs": {"module_id": "MOD-03", "class_name": "AvailabilityService", "layer": "Service", "package": "app.reservation.service", "description": "空き状況の検索と重複判定を行う。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"id": "mod-04", "type": "module", "label": "ReservationRepository", "status": "review", "attrs": {"module_id": "MOD-04", "class_name": "ReservationRepository", "layer": "Repository", "package": "app.reservation.dao", "description": "予約テーブルへの永続化を担う。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"id": "mod-05", "type": "module", "label": "ReservationValidator", "status": "review", "attrs": {"module_id": "MOD-05", "class_name": "ReservationValidator", "layer": "Validator", "package": "app.reservation.service", "description": "予約入力値と業務ルールの検証を行う。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"id": "mod-06", "type": "module", "label": "ApprovalService", "status": "review", "attrs": {"module_id": "MOD-06", "class_name": "ApprovalService", "layer": "Service", "package": "app.approval.service", "description": "特別会議室予約の承認・却下を担う。"}, "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"id": "req-f01", "type": "requirement", "label": "空き状況照会", "status": "review", "attrs": {"req_id": "F-01", "name": "空き状況照会", "kind": "機能", "statement": "利用者は日付・時間帯・階を指定して、予約可能な会議室の一覧を表示できる"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-f02", "type": "requirement", "label": "予約登録", "status": "review", "attrs": {"req_id": "F-02", "name": "予約登録", "kind": "機能", "statement": "利用者は会議室・日時・利用人数・目的を入力して予約を登録できる"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-f03", "type": "requirement", "label": "予約変更", "status": "review", "attrs": {"req_id": "F-03", "name": "予約変更", "kind": "機能", "statement": "利用者は自分が登録した予約の時間や人数を変更できる"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-f04", "type": "requirement", "label": "予約取消", "status": "review", "attrs": {"req_id": "F-04", "name": "予約取消", "kind": "機能", "statement": "利用者は自分が登録した予約を取消できる"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-f05", "type": "requirement", "label": "予約一覧確認", "status": "review", "attrs": {"req_id": "F-05", "name": "予約一覧確認", "kind": "機能", "statement": "利用者は自分の予約、または会議室ごとの当日の予約を一覧で確認できる"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-f06", "type": "requirement", "label": "予約承認・確定", "status": "review", "attrs": {"req_id": "F-06", "name": "予約承認・確定", "kind": "機能", "statement": "一部の会議室（役員会議室など）の予約は、会議室管理者の承認があって初めて確定する"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-f07", "type": "requirement", "label": "利用実績集計", "status": "review", "attrs": {"req_id": "F-07", "name": "利用実績集計", "kind": "機能", "statement": "会議室ごと・月ごとの予約件数と延べ利用時間を集計して表示できる"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-f08", "type": "requirement", "label": "空き状況照会からの予約遷移", "status": "review", "attrs": {"req_id": "F-08", "name": "空き状況照会からの予約遷移", "kind": "機能", "statement": "空き状況照会で「予約する」を押すと予約入力へ遷移し、選択した会議室・日時を引き継ぐ"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "req-f09", "type": "requirement", "label": "予約登録後の一覧遷移", "status": "review", "attrs": {"req_id": "F-09", "name": "予約登録後の一覧遷移", "kind": "機能", "statement": "予約入力で「登録」を押すと予約一覧へ遷移する（重複時はエラー表示で留まる）"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "req-f10", "type": "requirement", "label": "予約一覧から詳細への遷移", "status": "review", "attrs": {"req_id": "F-10", "name": "予約一覧から詳細への遷移", "kind": "機能", "statement": "予約一覧で明細を選ぶと予約詳細・変更へ遷移する"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "req-f11", "type": "requirement", "label": "予約詳細からの取消遷移", "status": "review", "attrs": {"req_id": "F-11", "name": "予約詳細からの取消遷移", "kind": "機能", "statement": "予約詳細・変更で「取消」を押すと予約一覧へ遷移する"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "req-f12", "type": "requirement", "label": "承認操作と予約確定", "status": "review", "attrs": {"req_id": "F-12", "name": "承認操作と予約確定", "kind": "機能", "statement": "承認待ち一覧で「承認」を押すと承認待ち一覧へ戻り、承認後に予約が確定する"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"id": "req-nfr01", "type": "requirement", "label": "空き状況照会の応答時間", "status": "review", "attrs": {"req_id": "NFR-01", "name": "空き状況照会の応答時間", "kind": "非機能", "statement": "空き状況照会の応答は通常時2秒以内であること"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-nfr02", "type": "requirement", "label": "同時利用者数", "status": "review", "attrs": {"req_id": "NFR-02", "name": "同時利用者数", "kind": "非機能", "statement": "始業直後の混雑時に200名が同時に操作しても破綻しないこと"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-nfr03", "type": "requirement", "label": "稼働時間", "status": "review", "attrs": {"req_id": "NFR-03", "name": "稼働時間", "kind": "非機能", "statement": "平日7:00〜22:00は停止しないこと（計画停止を除く）"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-nfr04", "type": "requirement", "label": "利用環境・認証", "status": "review", "attrs": {"req_id": "NFR-04", "name": "利用環境・認証", "kind": "非機能", "statement": "社内ネットワークからのみ利用可能とし、社員番号と既存の認証基盤でログインする"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "req-nfr05", "type": "requirement", "label": "操作履歴の記録", "status": "review", "attrs": {"req_id": "NFR-05", "name": "操作履歴の記録", "kind": "非機能", "statement": "予約の登録・変更・取消は、いつ・誰が行ったかを記録として残すこと"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "scr-01", "type": "screen", "label": "空き状況照会", "status": "review", "attrs": {"name": "空き状況照会", "screen_id": "SCR-01", "screen_type": "照会", "description": "日付・階・時間帯で会議室の空きを検索して表示する。主な利用者は一般社員。"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"id": "scr-02", "type": "screen", "label": "予約入力", "status": "review", "attrs": {"name": "予約入力", "screen_id": "SCR-02", "screen_type": "入力", "description": "会議室・日時・人数・目的を入力して予約を登録する。主な利用者は一般社員。"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"id": "scr-03", "type": "screen", "label": "予約一覧", "status": "review", "attrs": {"name": "予約一覧", "screen_id": "SCR-03", "screen_type": "一覧", "description": "自分の予約または会議室単位の予約を一覧表示する。主な利用者は一般社員。"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"id": "scr-04", "type": "screen", "label": "予約詳細・変更", "status": "review", "attrs": {"name": "予約詳細・変更", "screen_id": "SCR-04", "screen_type": "入力", "description": "既存予約の内容を表示し、変更・取消を行う。主な利用者は一般社員。"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"id": "scr-05", "type": "screen", "label": "承認待ち一覧", "status": "review", "attrs": {"name": "承認待ち一覧", "screen_id": "SCR-05", "screen_type": "一覧", "description": "特別会議室の承認待ち予約を一覧し、承認／却下する。主な利用者は会議室管理者。"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"id": "scr-06", "type": "screen", "label": "利用実績", "status": "review", "attrs": {"name": "利用実績", "screen_id": "SCR-06", "screen_type": "帳票", "description": "会議室ごと・月ごとの予約件数と延べ利用時間を出力する。主な利用者は会議室管理者。"}, "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"id": "term-0001", "type": "term", "label": "会議室", "status": "review", "attrs": {"term": "会議室", "definition": "予約の対象となる部屋。階・定員・種別（一般／特別）を持つ"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "term-0002", "type": "term", "label": "特別会議室", "status": "review", "attrs": {"term": "特別会議室", "definition": "役員会議室など、予約に管理者の承認が必要な会議室"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "term-0003", "type": "term", "label": "予約枠", "status": "review", "attrs": {"term": "予約枠", "definition": "30分単位で区切った時間の最小単位"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "term-0004", "type": "term", "label": "会議室管理者", "status": "review", "attrs": {"term": "会議室管理者", "definition": "総務部の担当者。特別会議室の承認と、全予約の代理取消ができる"}, "source": [{"doc": "01_業務要求メモ_docx_9038bb5b"}]}, {"id": "tc-u01", "type": "test-case", "label": "予約重複チェック", "status": "review", "attrs": {"test_id": "TC-U01", "name": "予約重複チェック", "level": "単体", "precondition": "同一会議室・時間帯に既存予約がある", "steps": "重複する時間帯で予約登録を実行する", "expected": "重複エラーとなり登録されない"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "単体テスト"}}]}, {"id": "tc-u02", "type": "test-case", "label": "予約入力バリデーション", "status": "review", "attrs": {"test_id": "TC-U02", "name": "予約入力バリデーション", "level": "単体", "precondition": "予約入力フォームを開いている", "steps": "必須未入力・定員超過・時間長超過で登録する", "expected": "検証違反が返り登録されない"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "単体テスト"}}]}, {"id": "tc-u03", "type": "test-case", "label": "空き会議室検索", "status": "review", "attrs": {"test_id": "TC-U03", "name": "空き会議室検索", "level": "単体", "precondition": "会議室と既存予約が登録済み", "steps": "日付・階・時間帯を条件に検索する", "expected": "条件に合う空き会議室のみ返る"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "単体テスト"}}]}, {"id": "tc-u04", "type": "test-case", "label": "予約取消の時間制約", "status": "review", "attrs": {"test_id": "TC-U04", "name": "予約取消の時間制約", "level": "単体", "precondition": "開始1時間前を過ぎた予約がある", "steps": "予約者本人が取消を実行する", "expected": "取消不可エラーとなる"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "単体テスト"}}]}, {"id": "tc-i01", "type": "test-case", "label": "空き照会から予約登録への遷移", "status": "review", "attrs": {"test_id": "TC-I01", "name": "空き照会から予約登録への遷移", "level": "結合", "precondition": "利用者がログイン済み", "steps": "空き状況照会→対象選択→予約登録と操作する", "expected": "予約が登録され一覧に反映される"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "結合テスト"}}]}, {"id": "tc-i02", "type": "test-case", "label": "予約登録後の一覧遷移", "status": "review", "attrs": {"test_id": "TC-I02", "name": "予約登録後の一覧遷移", "level": "結合", "precondition": "予約登録が完了した直後", "steps": "登録完了画面から一覧へ遷移する", "expected": "登録した予約が一覧の最上部に表示される"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "結合テスト"}}]}, {"id": "tc-i03", "type": "test-case", "label": "承認操作による予約確定", "status": "review", "attrs": {"test_id": "TC-I03", "name": "承認操作による予約確定", "level": "結合", "precondition": "特別会議室の仮予約がある", "steps": "承認者が承認操作を行う", "expected": "仮予約が確定状態になる"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "結合テスト"}}]}, {"id": "tc-s01", "type": "test-case", "label": "予約変更の一連業務", "status": "review", "attrs": {"test_id": "TC-S01", "name": "予約変更の一連業務", "level": "総合", "precondition": "確定済みの予約がある", "steps": "予約変更→再検証→確定まで通しで実施する", "expected": "変更後の内容で予約が確定する"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "総合テスト"}}]}, {"id": "tc-s02", "type": "test-case", "label": "利用実績集計", "status": "review", "attrs": {"test_id": "TC-S02", "name": "利用実績集計", "level": "総合", "precondition": "期間内に予約実績がある", "steps": "月次で利用実績を集計する", "expected": "会議室別の利用時間が正しく集計される"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "総合テスト"}}]}, {"id": "tr-01", "type": "test-run", "label": "TR-01", "status": "review", "attrs": {"run_id": "TR-01", "result": "合格", "executed_on": "2026-07-08", "tester": "田中"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "実施結果"}}]}, {"id": "tr-02", "type": "test-run", "label": "TR-02", "status": "review", "attrs": {"run_id": "TR-02", "result": "合格", "executed_on": "2026-07-08", "tester": "田中"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "実施結果"}}]}, {"id": "tr-03", "type": "test-run", "label": "TR-03", "status": "review", "attrs": {"run_id": "TR-03", "result": "不合格", "executed_on": "2026-07-08", "tester": "佐藤", "defect": "BUG-101"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "実施結果"}}]}, {"id": "tr-04", "type": "test-run", "label": "TR-04", "status": "review", "attrs": {"run_id": "TR-04", "result": "合格", "executed_on": "2026-07-09", "tester": "佐藤", "note": "TR-03 の不具合(BUG-101)修正後の再試験"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "実施結果"}}]}, {"id": "tr-05", "type": "test-run", "label": "TR-05", "status": "review", "attrs": {"run_id": "TR-05", "result": "合格", "executed_on": "2026-07-09", "tester": "鈴木"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "実施結果"}}]}, {"id": "tr-06", "type": "test-run", "label": "TR-06", "status": "review", "attrs": {"run_id": "TR-06", "result": "不合格", "executed_on": "2026-07-09", "tester": "鈴木", "defect": "BUG-102"}, "source": [{"doc": "06_テスト仕様_xlsx_7e3c2f10", "location": {"sheet": "実施結果"}}]}], "relations": [{"type": "constrains", "from": "br-001", "to": "di-room-id", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-001", "to": "di-use-date", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-001", "to": "di-start-time", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-001", "to": "di-end-time", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-002", "to": "di-use-date", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-002", "to": "di-start-time", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-002", "to": "di-end-time", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-003", "to": "di-start-time", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-003", "to": "di-end-time", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-004", "to": "di-headcount", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-004", "to": "di-capacity", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-005", "to": "di-status", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-005", "to": "di-start-time", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-006", "to": "di-room-type", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-006", "to": "di-status", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-007", "to": "di-user-id", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-007", "to": "di-status", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-008", "to": "di-rsv-id", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-009", "to": "di-floor-no", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-010", "to": "di-user-id", "attrs": {}, "status": "draft", "source": null}, {"type": "constrains", "from": "br-011", "to": "di-user-id", "attrs": {}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-room", "to": "di-room-id", "attrs": {"physical_name": "ROOM_ID", "pk": true, "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-room", "to": "di-room-name", "attrs": {"physical_name": "ROOM_NAME", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-room", "to": "di-floor-no", "attrs": {"physical_name": "FLOOR_NO", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-room", "to": "di-capacity", "attrs": {"physical_name": "CAPACITY", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-room", "to": "di-room-type", "attrs": {"physical_name": "ROOM_TYPE", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-rsv-id", "attrs": {"physical_name": "RSV_ID", "pk": true, "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-room-id", "attrs": {"physical_name": "ROOM_ID", "required": true, "note": "会議室（MRR_ROOM）への外部キー"}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-use-date", "attrs": {"physical_name": "USE_DATE", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-start-time", "attrs": {"physical_name": "START_TIME", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-end-time", "attrs": {"physical_name": "END_TIME", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-headcount", "attrs": {"physical_name": "HEADCOUNT", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-purpose", "attrs": {"physical_name": "PURPOSE", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-user-id", "attrs": {"physical_name": "USER_ID", "required": true, "note": "予約者。利用者（MRR_USER）への外部キー"}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-reservation", "to": "di-status", "attrs": {"physical_name": "STATUS", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-user", "to": "di-user-id", "attrs": {"physical_name": "USER_ID", "pk": true, "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-user", "to": "di-user-name", "attrs": {"physical_name": "USER_NAME", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-user", "to": "di-dept-name", "attrs": {"physical_name": "DEPT_NAME"}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-user", "to": "di-mail", "attrs": {"physical_name": "MAIL"}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-approval", "to": "di-apv-id", "attrs": {"physical_name": "APV_ID", "pk": true, "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-approval", "to": "di-rsv-id", "attrs": {"physical_name": "RSV_ID", "required": true, "note": "予約（MRR_RESERVATION）への外部キー"}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-approval", "to": "di-approver-id", "attrs": {"physical_name": "APPROVER_ID", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-approval", "to": "di-result", "attrs": {"physical_name": "RESULT", "required": true}, "status": "draft", "source": null}, {"type": "has-column", "from": "ent-approval", "to": "di-apv-time", "attrs": {"physical_name": "APV_TIME"}, "status": "draft", "source": null}, {"type": "displays", "from": "scr-02", "to": "di-room-id", "attrs": {"note": "会議室はプルダウンで必須。空き状況照会で選んだ会議室を初期表示する。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-02", "to": "di-use-date", "attrs": {"note": "利用日は日付で必須。当日以降のみ選択可、土日祝は選択不可。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-02", "to": "di-start-time", "attrs": {"note": "開始時刻はプルダウンで必須。8:00〜20:30 を30分刻みで選択する。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-02", "to": "di-end-time", "attrs": {"note": "終了時刻はプルダウンで必須。開始時刻より後で、開始からの差は最長4時間。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-02", "to": "di-headcount", "attrs": {"note": "利用人数は数値で必須。1以上、会議室の定員以下。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-02", "to": "di-purpose", "attrs": {"note": "利用目的はテキストで必須。全角40文字以内。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-02", "to": "di-user-id", "attrs": {"note": "予約者は表示のみ。ログイン中の社員を自動表示する。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-02", "to": "di-biko", "attrs": {"note": "備考はテキストで任意。全角100文字以内。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面項目_予約入力"}}]}, {"type": "displays", "from": "scr-01", "to": "di-use-date", "attrs": {"note": "検索条件（利用日）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-01", "to": "di-floor-no", "attrs": {"note": "検索条件（階）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-01", "to": "di-start-time", "attrs": {"note": "検索条件（時間帯・開始）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-01", "to": "di-end-time", "attrs": {"note": "検索条件（時間帯・終了）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-01", "to": "di-room-name", "attrs": {"note": "検索結果（空き会議室）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-01", "to": "di-capacity", "attrs": {"note": "検索結果（定員）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-03", "to": "di-room-name", "attrs": {"note": "一覧表示（会議室名）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-03", "to": "di-use-date", "attrs": {"note": "一覧表示（利用日）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-03", "to": "di-start-time", "attrs": {"note": "一覧表示（開始時刻）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-03", "to": "di-end-time", "attrs": {"note": "一覧表示（終了時刻）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-03", "to": "di-purpose", "attrs": {"note": "一覧表示（利用目的）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-03", "to": "di-status", "attrs": {"note": "一覧表示（状態）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-room-name", "attrs": {"note": "既存予約の内容表示。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-use-date", "attrs": {"note": "変更対象（利用日）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-start-time", "attrs": {"note": "変更対象（開始時刻）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-end-time", "attrs": {"note": "変更対象（終了時刻）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-headcount", "attrs": {"note": "変更対象（利用人数）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-purpose", "attrs": {"note": "変更対象（利用目的）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-user-id", "attrs": {"note": "予約者（表示のみ）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-04", "to": "di-status", "attrs": {"note": "予約の状態。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-05", "to": "di-room-name", "attrs": {"note": "承認待ち一覧（会議室名）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-05", "to": "di-use-date", "attrs": {"note": "承認待ち一覧（利用日）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-05", "to": "di-start-time", "attrs": {"note": "承認待ち一覧（開始時刻）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-05", "to": "di-end-time", "attrs": {"note": "承認待ち一覧（終了時刻）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-05", "to": "di-user-id", "attrs": {"note": "承認待ち一覧（予約者）。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-05", "to": "di-status", "attrs": {"note": "予約の状態。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-05", "to": "di-result", "attrs": {"note": "承認／却下の結果。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-06", "to": "di-room-name", "attrs": {"note": "会議室ごとに予約件数・延べ利用時間を集計して出力する。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "displays", "from": "scr-06", "to": "di-floor-no", "attrs": {"note": "会議室の階。"}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "enforces", "from": "mth-01", "to": "br-001", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-01", "to": "br-002", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-01", "to": "br-003", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-01", "to": "br-004", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-01", "to": "br-006", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-02", "to": "br-005", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-03", "to": "br-001", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-03", "to": "br-003", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-03", "to": "br-004", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-03", "to": "br-005", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-04", "to": "br-002", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-05", "to": "br-001", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-06", "to": "br-002", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-06", "to": "br-003", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-06", "to": "br-004", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "enforces", "from": "mth-07", "to": "br-006", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "メソッド仕様"}}]}, {"type": "executes", "from": "tr-01", "to": "tc-u01", "attrs": {}, "status": "review", "source": null}, {"type": "executes", "from": "tr-02", "to": "tc-u02", "attrs": {}, "status": "review", "source": null}, {"type": "executes", "from": "tr-03", "to": "tc-u03", "attrs": {}, "status": "review", "source": null}, {"type": "executes", "from": "tr-04", "to": "tc-u03", "attrs": {}, "status": "review", "source": null}, {"type": "executes", "from": "tr-05", "to": "tc-i01", "attrs": {}, "status": "review", "source": null}, {"type": "executes", "from": "tr-06", "to": "tc-i03", "attrs": {}, "status": "review", "source": null}, {"type": "interfaces", "from": "if-01", "to": "ent-user", "attrs": {}, "status": "review", "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"type": "interfaces", "from": "if-02", "to": "ent-reservation", "attrs": {}, "status": "review", "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"type": "interfaces", "from": "if-03", "to": "ent-reservation", "attrs": {}, "status": "review", "source": [{"doc": "04_業務ルール_外部連携_docx_be8764a5"}]}, {"type": "realizes", "from": "scr-01", "to": "req-f01", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "realizes", "from": "scr-02", "to": "req-f02", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "realizes", "from": "scr-04", "to": "req-f03", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "realizes", "from": "scr-04", "to": "req-f04", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "realizes", "from": "scr-03", "to": "req-f05", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "realizes", "from": "scr-05", "to": "req-f06", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "realizes", "from": "scr-06", "to": "req-f07", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面一覧"}}]}, {"type": "realizes", "from": "scr-01", "to": "req-f08", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"type": "realizes", "from": "scr-02", "to": "req-f09", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"type": "realizes", "from": "scr-03", "to": "req-f10", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"type": "realizes", "from": "scr-04", "to": "req-f11", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"type": "realizes", "from": "scr-05", "to": "req-f12", "attrs": {}, "status": "review", "source": [{"doc": "02_画面一覧_項目_xlsx_29441a79", "location": {"sheet": "画面遷移"}}]}, {"type": "realizes", "from": "mod-01", "to": "req-f02", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-01", "to": "req-f03", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-01", "to": "req-f04", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-02", "to": "req-f02", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-02", "to": "req-f03", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-02", "to": "req-f04", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-03", "to": "req-f01", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-04", "to": "req-f02", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-05", "to": "req-f02", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "realizes", "from": "mod-06", "to": "req-f06", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-01", "to": "scr-02", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-01", "to": "scr-03", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-01", "to": "scr-04", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-02", "to": "ent-reservation", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-03", "to": "scr-01", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-04", "to": "ent-reservation", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-05", "to": "scr-02", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-06", "to": "scr-05", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "refines", "from": "mod-06", "to": "ent-approval", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-02", "to": "mth-01", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-02", "to": "mth-02", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-02", "to": "mth-03", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-03", "to": "mth-04", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-03", "to": "mth-05", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-05", "to": "mth-06", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-06", "to": "mth-07", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "has-method", "from": "mod-04", "to": "mth-08", "attrs": {}, "status": "review", "source": [{"doc": "05_クラス_メソッド仕様_xlsx_d89ed185", "location": {"sheet": "クラス一覧"}}]}, {"type": "verifies", "from": "tc-u01", "to": "req-f02", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-u01", "to": "mth-05", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-u02", "to": "mth-06", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-u03", "to": "req-f01", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-u03", "to": "mth-04", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-u04", "to": "req-f04", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-u04", "to": "mth-02", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-i01", "to": "req-f08", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-i01", "to": "req-f02", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-i02", "to": "req-f09", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-i03", "to": "req-f06", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-i03", "to": "req-f12", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-i03", "to": "mth-07", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-s01", "to": "req-f03", "attrs": {}, "status": "review", "source": null}, {"type": "verifies", "from": "tc-s02", "to": "req-f07", "attrs": {}, "status": "review", "source": null}], "problems": [{"level": "warn", "where": "req-nfr01", "message": "要件 '空き状況照会の応答時間' はどの関係からも参照されていない（孤児）"}, {"level": "warn", "where": "req-nfr02", "message": "要件 '同時利用者数' はどの関係からも参照されていない（孤児）"}, {"level": "warn", "where": "req-nfr03", "message": "要件 '稼働時間' はどの関係からも参照されていない（孤児）"}, {"level": "warn", "where": "req-nfr04", "message": "要件 '利用環境・認証' はどの関係からも参照されていない（孤児）"}, {"level": "warn", "where": "req-nfr05", "message": "要件 '操作履歴の記録' はどの関係からも参照されていない（孤児）"}]}</script>
+<script>
+"use strict";
+const DB = JSON.parse(document.getElementById("contextdb-data").textContent);
+const STATUS_LABEL = {draft:"起票", review:"レビュー中", approved:"承認済",
+                      deprecated:"廃止"};
+const STATUSES = Object.keys(STATUS_LABEL);
+const dark = () => {
+  const t = document.documentElement.getAttribute("data-theme");
+  if (t) return t === "dark";
+  return matchMedia("(prefers-color-scheme: dark)").matches;
+};
+const typeDef = Object.fromEntries(DB.itemTypes.map(t => [t.name, t]));
+const relDef  = Object.fromEntries(DB.relationTypes.map(r => [r.name, r]));
+const typeColor = t => dark() ? typeDef[t].colorDark : typeDef[t].color;
+
+// ---- グラフモデル ----------------------------------------------------------
+const nodes = DB.items.map((it, i) => ({...it, i, x:0, y:0, vx:0, vy:0, deg:0}));
+const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+const links = DB.relations
+  .filter(r => byId[r.from] && byId[r.to])
+  .map((r, i) => ({...r, i, s: byId[r.from], t: byId[r.to]}));
+links.forEach(l => { l.s.deg++; l.t.deg++; });
+nodes.forEach(n => { n.r = 7 + Math.min(8, Math.sqrt(n.deg) * 2.4); });
+
+const probsOf = {};   // アイテム ID → {error:n, warn:n}
+DB.problems.forEach(p => {
+  if (!byId[p.where]) return;
+  (probsOf[p.where] = probsOf[p.where] || {error:0, warn:0})[p.level]++;
+});
+
+// 決定論的な初期配置: 種別ごとのクラスタ中心 + 黄金角スパイラル
+function seed() {
+  const T = DB.itemTypes.length, cnt = {};
+  nodes.forEach(n => {
+    const ti = DB.itemTypes.findIndex(t => t.name === n.type);
+    const k = (cnt[n.type] = (cnt[n.type] || 0) + 1);
+    const a = 2 * Math.PI * ti / Math.max(1, T);
+    const cx = 300 * Math.cos(a), cy = 300 * Math.sin(a);
+    const sa = k * 2.39996, sr = 14 * Math.sqrt(k);
+    n.x = cx + sr * Math.cos(sa); n.y = cy + sr * Math.sin(sa);
+    n.vx = n.vy = 0;
+  });
+}
+
+// ---- 力学シミュレーション ---------------------------------------------------
+let alpha = 0;
+function step() {
+  const REP = 6400, SPRING = 0.045, REST = 150, CENTER = 0.018;
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i];
+    for (let j = i + 1; j < nodes.length; j++) {
+      const b = nodes[j];
+      let dx = a.x - b.x, dy = a.y - b.y;
+      let d2 = dx*dx + dy*dy || 1; if (d2 > 250000) continue;
+      const f = REP / d2 * alpha, d = Math.sqrt(d2);
+      dx = dx/d*f; dy = dy/d*f;
+      a.vx += dx; a.vy += dy; b.vx -= dx; b.vy -= dy;
+    }
+  }
+  links.forEach(l => {
+    const dx = l.t.x - l.s.x, dy = l.t.y - l.s.y;
+    const d = Math.sqrt(dx*dx + dy*dy) || 1;
+    const f = (d - REST) * SPRING * alpha;
+    const fx = dx/d*f, fy = dy/d*f;
+    l.s.vx += fx; l.s.vy += fy; l.t.vx -= fx; l.t.vy -= fy;
+  });
+  nodes.forEach(n => {
+    if (n === dragNode) { n.vx = n.vy = 0; return; }
+    n.vx -= n.x * CENTER * alpha; n.vy -= n.y * CENTER * alpha;
+    n.vx *= 0.6; n.vy *= 0.6; n.x += n.vx; n.y += n.vy;
+  });
+  alpha *= 0.988;
+}
+let rafId = null;
+function warm(a) {
+  alpha = Math.max(alpha, a);
+  if (rafId) return;
+  const loop = () => {
+    step(); position();
+    rafId = alpha > 0.005 ? requestAnimationFrame(loop) : null;
+  };
+  rafId = requestAnimationFrame(loop);
+}
+
+// ---- SVG 構築 --------------------------------------------------------------
+const svg = document.getElementById("svg"), vp = document.getElementById("viewport");
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+};
+// レビュー中サブグラフ: レビュー中のアイテム・関係と、その直接の隣接ノード
+const reviewSet = new Set();
+nodes.forEach(n => { if (n.status === "review") reviewSet.add(n.id); });
+links.forEach(l => {
+  if (l.status === "review" || l.s.status === "review" || l.t.status === "review") {
+    reviewSet.add(l.s.id); reviewSet.add(l.t.id);
+  }
+});
+const inReviewGraph = l => l.status === "review" ||
+  l.s.status === "review" || l.t.status === "review";
+
+links.forEach(l => {
+  l.line = el("line", {class: "link st-" + l.status, "marker-end": "url(#arr)"});
+  l.hit = el("line", {stroke: "transparent", "stroke-width": "10"});
+  l.hit.style.pointerEvents = "stroke";
+  document.getElementById("glinks").append(l.line, l.hit);
+  l.text = el("text", {class: "edgelabel", "text-anchor": "middle"});
+  l.text.textContent = relDef[l.type].label;
+  document.getElementById("glabels").appendChild(l.text);
+});
+nodes.forEach(n => {
+  n.g = el("g", {class: "node", tabindex: "0", role: "button"});
+  const pr = probsOf[n.id];
+  if (pr) {
+    n.ringEl = el("circle", {class: "ring", r: n.r + 4});
+    n.ringEl.style.stroke = pr.error ? "var(--err)" : "var(--warn)";
+    n.g.appendChild(n.ringEl);
+  }
+  n.circle = el("circle", {r: n.r});
+  n.text = el("text", {dy: n.r + 13, "text-anchor": "middle"});
+  // 長文ラベル（文を label_field にする種別）は切り詰める。全文は
+  // ツールチップと詳細パネルで見せる
+  n.text.textContent = n.label.length > 20 ? n.label.slice(0, 19) + "…" : n.label;
+  n.g.append(n.circle, n.text);
+  n.g.classList.add("st-" + n.status);
+  n.g.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select({kind:"item", ref:n}); }
+  });
+  n.g.addEventListener("pointerenter", ev => showTip(ev,
+    `<b>${esc(n.label)}</b><br>${esc(typeDef[n.type].label)} · ${esc(n.id)}`));
+  n.g.addEventListener("pointerleave", hideTip);
+  n.g.addEventListener("pointerdown", ev => startDrag(n, ev));
+  document.getElementById("gnodes").appendChild(n.g);
+});
+links.forEach(l => {
+  l.hit.addEventListener("pointerenter", ev => {
+    const extra = Object.entries(l.attrs).map(([k,v]) =>
+      `<br>${esc(k)}: ${esc(String(v))}`).join("");
+    showTip(ev, `<b>${esc(relDef[l.type].label)}</b> (${esc(l.type)})<br>` +
+      `${esc(l.s.label)} → ${esc(l.t.label)}${extra}`);
+  });
+  l.hit.addEventListener("pointerleave", hideTip);
+  l.hit.addEventListener("pointerdown", ev => ev.stopPropagation());
+  l.hit.addEventListener("pointerup", ev => {
+    ev.stopPropagation(); select({kind:"rel", ref:l});
+  });
+});
+function paint() {   // テーマ依存色の適用（詳細・一覧のスウォッチも描き直す）
+  nodes.forEach(n => { n.circle.style.fill = typeColor(n.type); });
+  renderDetail(); renderTable();
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
+new MutationObserver(paint).observe(document.documentElement,
+  {attributes: true, attributeFilter: ["data-theme"]});
+
+// ---- 表示状態 --------------------------------------------------------------
+const hiddenTypes = new Set(), hiddenRels = new Set(), hiddenStatuses = new Set();
+let query = "", selected = null, showEdgeLabels = false, tableMode = false;
+let reviewMode = false;
+const nodeVisible = n => !hiddenTypes.has(n.type) && !hiddenStatuses.has(n.status);
+const linkVisible = l => !hiddenRels.has(l.type) && !hiddenStatuses.has(l.status) &&
+                         nodeVisible(l.s) && nodeVisible(l.t);
+
+function refresh() {
+  const q = query.trim().toLowerCase();
+  const match = n => !q || n.label.toLowerCase().includes(q) ||
+                     n.id.toLowerCase().includes(q);
+  const neigh = new Set();
+  if (selected && selected.kind === "item") {
+    neigh.add(selected.ref.id);
+    links.forEach(l => {
+      if (l.s === selected.ref) neigh.add(l.t.id);
+      if (l.t === selected.ref) neigh.add(l.s.id);
+    });
+  }
+  nodes.forEach(n => {
+    n.g.style.display = nodeVisible(n) ? "" : "none";
+    const dim = (q && !match(n)) ||
+                (neigh.size && !neigh.has(n.id)) ||
+                (reviewMode && !reviewSet.has(n.id));
+    n.g.classList.toggle("dim", !!dim);
+    n.g.classList.toggle("sel", !!(selected && selected.kind === "item" &&
+                                   selected.ref === n));
+  });
+  links.forEach(l => {
+    const vis = linkVisible(l);
+    l.line.style.display = vis ? "" : "none";
+    l.hit.style.display = vis ? "" : "none";
+    const hi = selected && (
+      (selected.kind === "item" && (l.s === selected.ref || l.t === selected.ref)) ||
+      (selected.kind === "rel" && l === selected.ref));
+    l.line.classList.toggle("hi", !!hi);
+    l.line.setAttribute("marker-end", hi ? "url(#arrHi)" : "url(#arr)");
+    const dim = ((neigh.size || q) && !hi) ||
+                (reviewMode && !inReviewGraph(l));
+    l.line.classList.toggle("dim", !!dim);
+    l.text.style.display = vis && (showEdgeLabels || hi) && !dim ? "" : "none";
+  });
+  renderTable();
+}
+function position() {
+  nodes.forEach(n => n.g.setAttribute("transform", `translate(${n.x},${n.y})`));
+  links.forEach(l => {
+    const dx = l.t.x - l.s.x, dy = l.t.y - l.s.y, d = Math.sqrt(dx*dx+dy*dy) || 1;
+    // 矢印がノード縁で止まるよう半径ぶん短縮
+    const sx = l.s.x + dx/d*l.s.r, sy = l.s.y + dy/d*l.s.r;
+    const tx = l.t.x - dx/d*(l.t.r+3), ty = l.t.y - dy/d*(l.t.r+3);
+    for (const ln of [l.line, l.hit]) {
+      ln.setAttribute("x1", sx); ln.setAttribute("y1", sy);
+      ln.setAttribute("x2", tx); ln.setAttribute("y2", ty);
+    }
+    l.text.setAttribute("x", (sx+tx)/2); l.text.setAttribute("y", (sy+ty)/2 - 4);
+  });
+}
+
+// ---- パン / ズーム / ドラッグ -----------------------------------------------
+let view = {x: 0, y: 0, k: 1};
+const applyView = () =>
+  vp.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
+function fit() {
+  const vis = nodes.filter(nodeVisible);
+  if (!vis.length) return;
+  const xs = vis.map(n => n.x), ys = vis.map(n => n.y);
+  const x0 = Math.min(...xs)-60, x1 = Math.max(...xs)+60;
+  const y0 = Math.min(...ys)-60, y1 = Math.max(...ys)+60;
+  const w = svg.clientWidth, h = svg.clientHeight;
+  view.k = Math.min(2, w/(x1-x0), h/(y1-y0));
+  view.x = w/2 - (x0+x1)/2*view.k; view.y = h/2 - (y0+y1)/2*view.k;
+  applyView();
+}
+svg.addEventListener("wheel", ev => {
+  ev.preventDefault();
+  const k = Math.min(4, Math.max(0.15, view.k * (ev.deltaY < 0 ? 1.15 : 0.87)));
+  const r = svg.getBoundingClientRect();
+  const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  view.x = mx - (mx - view.x) * k / view.k;
+  view.y = my - (my - view.y) * k / view.k;
+  view.k = k; applyView();
+}, {passive: false});
+// クリックとドラッグは移動量しきい値で区別する（ポインタキャプチャ中は
+// click イベントの標的が変わるため、click には依存しない）。
+let panFrom = null, dragNode = null, downAt = null, moved = false;
+svg.addEventListener("pointerdown", ev => {
+  if (dragNode) return;
+  panFrom = {x: ev.clientX - view.x, y: ev.clientY - view.y};
+  downAt = {x: ev.clientX, y: ev.clientY}; moved = false;
+  svg.classList.add("panning"); svg.setPointerCapture(ev.pointerId);
+});
+svg.addEventListener("pointermove", ev => {
+  if (downAt && Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y) > 3) moved = true;
+  if (dragNode) {
+    if (!moved) return;
+    const r = svg.getBoundingClientRect();
+    dragNode.x = (ev.clientX - r.left - view.x) / view.k;
+    dragNode.y = (ev.clientY - r.top - view.y) / view.k;
+    warm(0.12); return;
+  }
+  if (panFrom) { view.x = ev.clientX - panFrom.x; view.y = ev.clientY - panFrom.y; applyView(); }
+});
+const endPointer = ev => {
+  if (!moved) {
+    if (dragNode) select({kind: "item", ref: dragNode});
+    else if (downAt && selected) { selected = null; refresh(); renderDetail(); }
+  }
+  panFrom = null; dragNode = null; downAt = null;
+  svg.classList.remove("panning");
+};
+svg.addEventListener("pointerup", endPointer);
+svg.addEventListener("pointercancel", endPointer);
+function startDrag(n, ev) {
+  ev.stopPropagation(); dragNode = n;
+  downAt = {x: ev.clientX, y: ev.clientY}; moved = false;
+  svg.setPointerCapture(ev.pointerId);
+}
+
+// ---- ツールチップ ------------------------------------------------------------
+const tip = document.getElementById("tip");
+function showTip(ev, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const r = document.getElementById("stage").getBoundingClientRect();
+  tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 330) + "px";
+  tip.style.top = (ev.clientY - r.top + 12) + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+// ---- 左パネル ----------------------------------------------------------------
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function buildFilters() {
+  const ft = document.getElementById("ftypes");
+  DB.itemTypes.forEach(t => {
+    const n = nodes.filter(x => x.type === t.name).length;
+    const row = document.createElement("label");
+    row.className = "chk";
+    row.innerHTML = `<input type="checkbox" checked><span class="sw"></span>` +
+      `<span>${esc(t.label)}</span><span class="n">${n}</span>`;
+    row.querySelector(".sw").style.background = typeColor(t.name);
+    row.querySelector("input").addEventListener("change", ev => {
+      ev.target.checked ? hiddenTypes.delete(t.name) : hiddenTypes.add(t.name);
+      refresh();
+    });
+    ft.appendChild(row);
+    new MutationObserver(() => {
+      row.querySelector(".sw").style.background = typeColor(t.name);
+    }).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+  });
+  const fr = document.getElementById("frels");
+  DB.relationTypes.forEach(r => {
+    const n = links.filter(l => l.type === r.name).length;
+    const row = document.createElement("label");
+    row.className = "chk rel";
+    row.innerHTML = `<input type="checkbox" checked><span class="sw"></span>` +
+      `<span>${esc(r.label)}</span><span class="n">${n}</span>`;
+    row.querySelector("input").addEventListener("change", ev => {
+      ev.target.checked ? hiddenRels.delete(r.name) : hiddenRels.add(r.name);
+      refresh();
+    });
+    fr.appendChild(row);
+  });
+  const fs = document.getElementById("fstatus");
+  STATUSES.forEach(st => {
+    const ni = nodes.filter(n => n.status === st).length;
+    const nl = links.filter(l => l.status === st).length;
+    if (!ni && !nl) return;
+    const row = document.createElement("label");
+    row.className = "chk";
+    row.title = `アイテム ${ni} 件 / 関係 ${nl} 件`;
+    row.innerHTML = `<input type="checkbox" checked>` +
+      `<span class="sw st st-${st}"></span>` +
+      `<span>${esc(STATUS_LABEL[st])}</span><span class="n">${ni + nl}</span>`;
+    row.querySelector("input").addEventListener("change", ev => {
+      ev.target.checked ? hiddenStatuses.delete(st) : hiddenStatuses.add(st);
+      refresh();
+    });
+    fs.appendChild(row);
+  });
+  const pr = document.getElementById("problems");
+  if (!DB.problems.length) {
+    pr.innerHTML = `<div class="empty">✓ error 0 件 / warn 0 件</div>`;
+  } else {
+    DB.problems.forEach(p => {
+      const row = document.createElement("div");
+      row.className = "p";
+      row.innerHTML = `<span class="lv ${p.level}">${p.level}</span>` +
+        `<span class="tx"><b>${esc(p.where)}</b> — ${esc(p.message)}</span>`;
+      if (byId[p.where]) row.addEventListener("click",
+        () => select({kind:"item", ref: byId[p.where]}));
+      pr.appendChild(row);
+    });
+  }
+}
+document.getElementById("q").addEventListener("input", ev => {
+  query = ev.target.value; refresh();
+});
+
+// ---- ヘッダ ------------------------------------------------------------------
+function buildHeader() {
+  document.getElementById("meta").textContent =
+    `${DB.root} @ ${DB.rev} · ${DB.generatedAt}`;
+  const errs = DB.problems.filter(p => p.level === "error").length;
+  const warns = DB.problems.length - errs;
+  const nrev = nodes.filter(n => n.status === "review").length +
+               links.filter(l => l.status === "review").length;
+  document.getElementById("stats").innerHTML =
+    `<span class="stat"><b>${nodes.length}</b><span>アイテム</span></span>` +
+    `<span class="stat"><b>${links.length}</b><span>関係</span></span>` +
+    (nrev ? `<span class="stat rev"><b>${nrev}</b><span>レビュー中</span></span>` : "") +
+    `<span class="stat ${errs ? "err" : "zero"}"><b>${errs}</b><span>error</span></span>` +
+    `<span class="stat ${warns ? "warn" : "zero"}"><b>${warns}</b><span>warn</span></span>`;
+}
+
+// ---- 詳細パネル ---------------------------------------------------------------
+function select(sel) {
+  selected = sel; refresh(); renderDetail();
+  if (tableMode && sel.kind === "item") toggleTable(false);
+}
+function fmtSource(src) {
+  if (!src || !src.length) return "";
+  return src.map(e => {
+    const loc = Object.entries(e.location || {}).map(([k,v]) => `${k}=${v}`).join(", ");
+    return `<div class="src">${esc(e.doc)}${loc ? ` <span>(${esc(loc)})</span>` : ""}` +
+      (e.evidence ? `<div class="ev">“${esc(e.evidence)}”</div>` : "") + `</div>`;
+  }).join("");
+}
+function attrsTable(attrs) {
+  const rows = Object.entries(attrs);
+  if (!rows.length) return "";
+  return `<table class="attrs">` + rows.map(([k,v]) =>
+    `<tr><td class="k">${esc(k)}</td><td class="v">${esc(String(v))}</td></tr>`
+  ).join("") + `</table>`;
+}
+function renderDetail() {
+  const d = document.getElementById("detail");
+  if (!selected) {
+    d.innerHTML = `<div class="placeholder">ノードまたはエッジを選択すると、` +
+      `属性・出典・関係がここに表示されます。</div>`;
+    return;
+  }
+  if (selected.kind === "rel") {
+    const l = selected.ref;
+    d.innerHTML =
+      `<div class="sec"><span class="chip">${esc(relDef[l.type].label)} (${esc(l.type)})</span> ` +
+      `<span class="pill ${esc(l.status)}">${esc(STATUS_LABEL[l.status] || l.status)}</span></div>` +
+      `<h3>${esc(l.s.label)} → ${esc(l.t.label)}</h3>` +
+      `<div class="idline">${esc(l.from)} → ${esc(l.to)}</div>` +
+      attrsTable(l.attrs) + fmtSource(l.source);
+    return;
+  }
+  const n = selected.ref;
+  const probs = DB.problems.filter(p => p.where === n.id);
+  const outRels = links.filter(l => l.s === n), inRels = links.filter(l => l.t === n);
+  const relRow = (l, other, arrow) =>
+    `<div class="relrow"><span class="rl">${esc(relDef[l.type].label)} ${arrow}</span> ` +
+    `<a data-id="${esc(other.id)}">${esc(other.label)}</a>` +
+    (Object.keys(l.attrs).length ? ` <span class="rl">· ${esc(Object.entries(l.attrs)
+       .map(([k,v]) => `${k}=${v}`).join(", "))}</span>` : "") + `</div>`;
+  d.innerHTML =
+    `<div class="sec"><span class="chip"><span class="sw" style="background:${typeColor(n.type)}"></span>` +
+    `${esc(typeDef[n.type].label)}</span> ` +
+    `<span class="pill ${esc(n.status)}">${esc(STATUS_LABEL[n.status] || n.status)}</span></div>` +
+    `<h3>${esc(n.label)}</h3><div class="idline">${esc(n.id)}</div>` +
+    probs.map(p => `<div class="prob ${p.level}">${esc(p.message)}</div>`).join("") +
+    attrsTable(n.attrs) + fmtSource(n.source) +
+    (outRels.length ? `<div class="sec"><h2 style="font-size:10.5px;letter-spacing:.08em;
+       color:var(--muted);text-transform:uppercase;margin:14px 0 4px">この項目から</h2>` +
+       outRels.map(l => relRow(l, l.t, "→")).join("") + `</div>` : "") +
+    (inRels.length ? `<div class="sec"><h2 style="font-size:10.5px;letter-spacing:.08em;
+       color:var(--muted);text-transform:uppercase;margin:14px 0 4px">この項目へ</h2>` +
+       inRels.map(l => relRow(l, l.s, "←")).join("") + `</div>` : "");
+  d.querySelectorAll("a[data-id]").forEach(a =>
+    a.addEventListener("click", () => select({kind:"item", ref: byId[a.dataset.id]})));
+}
+
+// ---- 一覧表示 -----------------------------------------------------------------
+function renderTable() {
+  if (!tableMode) return;
+  const tv = document.getElementById("tableview");
+  const q = query.trim().toLowerCase();
+  const rows = nodes.filter(nodeVisible).filter(n =>
+    !q || n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q));
+  tv.innerHTML = `<table><thead><tr><th>種別</th><th>ラベル</th><th>ID</th>` +
+    `<th>status</th><th>関係数</th><th>検証</th></tr></thead><tbody>` +
+    rows.map(n => {
+      const pr = probsOf[n.id];
+      return `<tr data-id="${esc(n.id)}">` +
+        `<td><span class="sw" style="background:${typeColor(n.type)}"></span>` +
+        `${esc(typeDef[n.type].label)}</td>` +
+        `<td>${esc(n.label)}</td><td>${esc(n.id)}</td>` +
+        `<td>${esc(STATUS_LABEL[n.status] || n.status)}</td><td>${n.deg}</td>` +
+        `<td>${pr ? (pr.error ? `error ${pr.error}` : "") +
+                    (pr.warn ? ` warn ${pr.warn}` : "") : "—"}</td></tr>`;
+    }).join("") + `</tbody></table>`;
+  tv.querySelectorAll("tr[data-id]").forEach(tr =>
+    tr.addEventListener("click", () => select({kind:"item", ref: byId[tr.dataset.id]})));
+}
+function toggleTable(on) {
+  tableMode = on;
+  document.getElementById("tableview").style.display = on ? "block" : "none";
+  svg.style.display = on ? "none" : "block";
+  document.getElementById("btnTable").classList.toggle("on", on);
+  renderTable();
+}
+
+// ---- ツールバー ---------------------------------------------------------------
+document.getElementById("btnFit").addEventListener("click", fit);
+document.getElementById("btnRelayout").addEventListener("click", () => {
+  seed(); warm(1); setTimeout(fit, 700);
+});
+document.getElementById("btnLabels").addEventListener("click", ev => {
+  showEdgeLabels = !showEdgeLabels;
+  ev.currentTarget.classList.toggle("on", showEdgeLabels);
+  refresh();
+});
+document.getElementById("btnTable").addEventListener("click", () => toggleTable(!tableMode));
+{
+  const btn = document.getElementById("btnReview");
+  const nrev = nodes.filter(n => n.status === "review").length +
+               links.filter(l => l.status === "review").length;
+  btn.textContent = `レビュー中 (${nrev})`;
+  if (nrev) {
+    btn.title = "レビュー中のアイテム・関係と、その直接の隣接だけを強調表示";
+    btn.addEventListener("click", () => {
+      reviewMode = !reviewMode;
+      btn.classList.toggle("on", reviewMode);
+      refresh();
+    });
+  } else {
+    btn.disabled = true;
+    btn.title = "レビュー中 (status: review) のアイテム・関係はありません";
+  }
+}
+
+// ---- 起動 --------------------------------------------------------------------
+buildHeader(); buildFilters(); paint(); refresh();
+seed(); warm(1);
+setTimeout(fit, 750); setTimeout(fit, 2200);   // 収束途中と収束後に画面へ収める
+addEventListener("resize", fit);
+</script>
+</body>
+</html>

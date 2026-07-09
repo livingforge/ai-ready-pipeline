@@ -1,0 +1,67 @@
+# テスト結果の正本（テスト工程・実行）— 06_テスト仕様.xlsx「実施結果」。
+# executes でテストケースに紐づく（実行1件＝1レコード、回帰は追記）。
+# TC-U03 は不合格(TR-03)→再試験で合格(TR-04)。最新の実施日が結果として採用される。
+
+- id: tr-01
+  run_id: TR-01
+  result: 合格
+  executed_on: '2026-07-08'
+  tester: 田中
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 実施結果
+- id: tr-02
+  run_id: TR-02
+  result: 合格
+  executed_on: '2026-07-08'
+  tester: 田中
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 実施結果
+- id: tr-03
+  run_id: TR-03
+  result: 不合格
+  executed_on: '2026-07-08'
+  tester: 佐藤
+  defect: BUG-101
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 実施結果
+- id: tr-04
+  run_id: TR-04
+  result: 合格
+  executed_on: '2026-07-09'
+  tester: 佐藤
+  note: TR-03 の不具合(BUG-101)修正後の再試験
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 実施結果
+- id: tr-05
+  run_id: TR-05
+  result: 合格
+  executed_on: '2026-07-09'
+  tester: 鈴木
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 実施結果
+- id: tr-06
+  run_id: TR-06
+  result: 不合格
+  executed_on: '2026-07-09'
+  tester: 鈴木
+  defect: BUG-102
+  status: review
+  source:
+    doc: 06_テスト仕様_xlsx_7e3c2f10
+    location:
+      sheet: 実施結果

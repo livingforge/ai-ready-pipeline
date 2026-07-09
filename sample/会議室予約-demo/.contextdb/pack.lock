@@ -2,5 +2,5 @@
 chain:
 - pack: jp-sier-std
   resolved_version: 1.1.0
-  content_hash: sha256:c9e410d9ed56898b0e768495d3ea9b7b9a11cd57f475760e2f99901843963754
-  resolved_from: ../.claude/skills/contextdb/scripts/packs/jp-sier-std
+  content_hash: sha256:dbea3bf511d75a6896f1ecc27be8b11d99935659c44acdea9378a02971352976
+  resolved_from: ../../../contextdb/packs/jp-sier-std
