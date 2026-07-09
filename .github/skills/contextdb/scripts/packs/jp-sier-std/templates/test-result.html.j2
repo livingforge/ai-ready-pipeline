@@ -1,0 +1,167 @@
+{#-
+  jp-sier-std テスト結果報告書（Excel 風 HTML・自動生成）
+
+  基本設計書と体裁（_house-style）を揃えた納品用 HTML。非 abstract の台帳文書で
+  パラメータは任意（doc.get で受ける）。block 未使用のため block 規約の対象外。
+  ドメイン種別: test-run（executes → test-case）。テスト設計（test-case）と
+  実行結果（test-run）を分離し、ケースごとの最新結果を集計する。
+  未実行のケースは「未実施」として、verifies を辿って要件ごとの合否まで閉じる。
+-#}
+{% import "_house-style.html.j2" as ex %}
+{% set cases = store.items_of('test-case') %}
+{% set reqs = store.items_of('requirement') %}
+{#- レベルの列挙順: 標準の 単体→結合→総合 を先に、拡張値を後ろに -#}
+{% set std_levels = ['単体', '結合', '総合'] %}
+{% set extra_levels = [] %}
+{% for c in cases %}
+{% if c.attrs.level not in std_levels and c.attrs.level not in extra_levels %}{% set _ = extra_levels.append(c.attrs.level) %}{% endif %}
+{% endfor %}
+{% set levels = std_levels + extra_levels %}
+{#- ケース → 最新の test-run（実施日の昇順で最後）。未実行なら none -#}
+{% macro latest_run(c) %}{% set runs = [] %}{% for rel in store.relations_of('executes', dst=c.id) %}{% set _ = runs.append(store.items[rel.src]) %}{% endfor %}{{ ((runs|sort(attribute='attrs.executed_on'))|last).id if runs else '' }}{% endmacro %}
+{{ ex.page_start(doc.title) }}
+
+{# ---- 表紙 ---- #}
+{{ ex.cover(doc.title, doc.get('doc_no', ''), doc.get('version', ''),
+            generated_at[:10], doc.get('org', '')) }}
+
+{# ---- 改訂履歴 ---- #}
+{% call ex.sheet('改訂履歴', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{% if data_history %}
+{% set rows = [] %}
+{% for h in data_history %}
+{% set _ = rows.append({'version': loop.index, 'date': h.date,
+    'note': (h.subject ~ '：' if h.subject and not h.initial else '') ~ h.summary
+            ~ '（' ~ (h.short if h.short else '未コミット') ~ '）',
+    'author': h.author}) %}
+{% endfor %}
+{{ ex.rev_history(rows) }}
+{% else %}
+{{ ex.rev_history([{'version': doc.get('version', '1.0'), 'date': generated_at[:10],
+    'note': '初版（データ版 ' ~ data_rev ~ ' から自動生成）', 'author': 'contextdb'}]) }}
+{% endif %}
+{% endcall %}
+
+{# ---- 目次 ---- #}
+{% call ex.sheet('目次', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.toc([
+  {'no': '1', 'sheet': '1. テスト実施サマリ', 'desc': 'レベル別の実施・合格・不合格・未実施と合格率'},
+  {'no': '2', 'sheet': '2. テスト結果一覧',   'desc': 'テストケースごとの最新結果（実施日・実施者・不具合）'},
+  {'no': '3', 'sheet': '3. 要件別テスト結果', 'desc': '要件→検証テスト→合否（V字トレースの閉じ）'},
+  {'no': '付録', 'sheet': '付録 出典一覧',     'desc': 'テスト結果の出典'},
+]) }}
+{% endcall %}
+
+{# ---- 1. テスト実施サマリ（レベル別集計 + 合格率） ---- #}
+{% call ex.sheet('1. テスト実施サマリ', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('1', 'テスト実施サマリ') }}
+{% set total = namespace(n=0, ex=0, ok=0, ng=0, hold=0, none=0) %}
+<table class="xl">
+  <tr><th style="width:12%">レベル</th><th>ケース数</th><th>実施済</th>
+      <th>合格</th><th>不合格</th><th>保留</th><th>未実施</th><th style="width:12%">合格率</th></tr>
+  {% for level in levels %}
+  {% set lv = namespace(n=0, ex=0, ok=0, ng=0, hold=0, none=0) %}
+  {% for c in cases if c.attrs.level == level %}
+  {% set rid = latest_run(c)|trim %}
+  {% set lv.n = lv.n + 1 %}
+  {% if rid %}
+  {% set lv.ex = lv.ex + 1 %}
+  {% set res = store.items[rid].attrs.result %}
+  {% if res == '合格' %}{% set lv.ok = lv.ok + 1 %}{% elif res == '不合格' %}{% set lv.ng = lv.ng + 1 %}{% else %}{% set lv.hold = lv.hold + 1 %}{% endif %}
+  {% else %}{% set lv.none = lv.none + 1 %}{% endif %}
+  {% endfor %}
+  {% if lv.n %}
+  {% set total.n = total.n + lv.n %}{% set total.ex = total.ex + lv.ex %}{% set total.ok = total.ok + lv.ok %}
+  {% set total.ng = total.ng + lv.ng %}{% set total.hold = total.hold + lv.hold %}{% set total.none = total.none + lv.none %}
+  <tr>
+    <td class="c">{{ level }}</td><td class="num">{{ lv.n }}</td><td class="num">{{ lv.ex }}</td>
+    <td class="num">{{ lv.ok }}</td><td class="num">{{ lv.ng }}</td><td class="num">{{ lv.hold }}</td>
+    <td class="num">{{ lv.none }}</td>
+    <td class="c">{% if lv.ex %}{{ (lv.ok / lv.ex * 100)|round(1) }}%{% else %}—{% endif %}</td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+  <tr>
+    <th class="c">合計</th><td class="num">{{ total.n }}</td><td class="num">{{ total.ex }}</td>
+    <td class="num">{{ total.ok }}</td><td class="num">{{ total.ng }}</td><td class="num">{{ total.hold }}</td>
+    <td class="num">{{ total.none }}</td>
+    <td class="c">{% if total.ex %}{{ (total.ok / total.ex * 100)|round(1) }}%{% else %}—{% endif %}</td>
+  </tr>
+</table>
+{% if not cases %}{{ ex.prose('テストケースは登録されていません。') }}{% endif %}
+{% endcall %}
+
+{# ---- 2. テスト結果一覧（ケースごとの最新結果） ---- #}
+{% call ex.sheet('2. テスト結果一覧', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('2', 'テスト結果一覧') }}
+<table class="xl">
+  <tr><th style="width:10%">テストID</th><th style="width:8%">レベル</th><th style="width:26%">名称</th>
+      <th style="width:9%">結果</th><th style="width:12%">実施日</th><th style="width:13%">実施者</th><th>不具合</th></tr>
+  {% for c in cases %}
+  {% set rid = latest_run(c)|trim %}
+  {% set r = store.items[rid] if rid else none %}
+  <tr>
+    <td class="c">{{ c.attrs.test_id }}</td>
+    <td class="c">{{ c.attrs.level }}</td>
+    <td>{{ c.attrs.name }}</td>
+    {% if r %}
+    <td class="c {{ 'st-approved' if r.attrs.result == '合格' else 'st-review' }}">{{ r.attrs.result }}</td>
+    <td class="c">{{ r.attrs.executed_on }}</td>
+    <td class="c">{{ r.attrs.get('tester', '—') }}</td>
+    <td>{{ r.attrs.get('defect', '') or ('—' if r.attrs.result == '合格' else '未記載') }}</td>
+    {% else %}
+    <td class="c st-draft">未実施</td><td class="c">—</td><td class="c">—</td><td>—</td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  {% if not cases %}<tr><td colspan="7">テストケースは登録されていません。</td></tr>{% endif %}
+</table>
+{% endcall %}
+
+{# ---- 3. 要件別テスト結果（要件→検証テスト→合否。V字の閉じ） ---- #}
+{% call ex.sheet('3. 要件別テスト結果', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('3', '要件別テスト結果') }}
+<table class="xl">
+  <tr><th style="width:24%">要件</th><th>検証するテスト（最新結果）</th><th style="width:12%">判定</th></tr>
+  {% for req in reqs %}
+  {% set vcases = store.relations_of('verifies', dst=req.id)|map(attribute='src')|list %}
+  {% set st = namespace(ng=false, ok=0, run=0) %}
+  {% set cells = [] %}
+  {% for cid in vcases %}
+  {% set c = store.items[cid] %}
+  {% set rid = latest_run(c)|trim %}
+  {% if rid %}
+  {% set res = store.items[rid].attrs.result %}
+  {% set st.run = st.run + 1 %}
+  {% if res == '合格' %}{% set st.ok = st.ok + 1 %}{% elif res == '不合格' %}{% set st.ng = true %}{% endif %}
+  {% set _ = cells.append(c.attrs.test_id ~ '：' ~ res) %}
+  {% else %}
+  {% set _ = cells.append(c.attrs.test_id ~ '：未実施') %}
+  {% endif %}
+  {% endfor %}
+  <tr>
+    <td>{{ req.attrs.req_id }}　{{ req.attrs.name }}〔{{ req.attrs.kind }}〕</td>
+    <td>{{ cells|join('、') if cells else '—' }}</td>
+    {% if not vcases %}<td class="c st-review">未検証</td>
+    {% elif st.ng %}<td class="c st-review">不合格</td>
+    {% elif st.run < vcases|length %}<td class="c st-review">未実施あり</td>
+    {% elif st.ok == vcases|length %}<td class="c st-approved">合格</td>
+    {% else %}<td class="c st-review">保留</td>{% endif %}
+  </tr>
+  {% endfor %}
+  {% if not reqs %}<tr><td colspan="3">要件は登録されていません。</td></tr>{% endif %}
+</table>
+{% endcall %}
+
+{# ---- 付録 出典一覧 ---- #}
+{% call ex.sheet('付録 出典一覧', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('付録', '出典一覧') }}
+{% set rows = [] %}
+{% for tr in store.items_of('test-run') %}
+{% if tr.source %}{% set _ = rows.append({'name': tr.label(mm), 'kind': mm.item_types[tr.type].label,
+    'id': tr.id, 'src': tr.source}) %}{% endif %}
+{% endfor %}
+{% if rows %}{{ ex.appendix_sources(rows) }}{% else %}{{ ex.prose('出典の登録はありません。') }}{% endif %}
+{% endcall %}
+
+{{ ex.page_end() }}

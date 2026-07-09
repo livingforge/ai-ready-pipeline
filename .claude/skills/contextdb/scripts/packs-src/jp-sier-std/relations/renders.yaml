@@ -1,10 +1,14 @@
 # 文書種別 → 使用する様式部品（トレーサビリティ）
-# 4 文書すべてが Excel 風 HTML 化され、共通の house-style 部品を使う。
+# 6 文書すべてが Excel 風 HTML 化され、共通の house-style 部品を使う。
 - { type: renders, from: dt-requirement-spec,    to: sp-house-style,         status: approved }
 - { type: renders, from: dt-requirement-spec,    to: sp-requirement-spec,    status: approved }
 - { type: renders, from: dt-basic-design,        to: sp-house-style,         status: approved }
 - { type: renders, from: dt-basic-design,        to: sp-basic-design,        status: approved }
 - { type: renders, from: dt-detail-design,       to: sp-house-style,         status: approved }
 - { type: renders, from: dt-detail-design,       to: sp-detail-design,       status: approved }
+- { type: renders, from: dt-test-spec,           to: sp-house-style,         status: review }
+- { type: renders, from: dt-test-spec,           to: sp-test-spec,           status: review }
+- { type: renders, from: dt-test-result,         to: sp-house-style,         status: review }
+- { type: renders, from: dt-test-result,         to: sp-test-result,         status: review }
 - { type: renders, from: dt-traceability-matrix, to: sp-house-style,         status: approved }
 - { type: renders, from: dt-traceability-matrix, to: sp-traceability-matrix, status: approved }

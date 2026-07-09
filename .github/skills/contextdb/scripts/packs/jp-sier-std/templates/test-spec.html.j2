@@ -1,0 +1,151 @@
+{#-
+  jp-sier-std テスト仕様書（Excel 風 HTML・自動生成）
+
+  基本設計書と体裁（_house-style）を揃えた納品用 HTML。非 abstract の台帳文書で
+  パラメータは任意（doc.get で受ける）。block 未使用のため block 規約の対象外。
+  ドメイン種別: test-case。verifies（→要件/メソッド/画面）で V字右側のトレースを持つ。
+  テストケースはレベル（単体/結合/総合…）ごとにシートを分けて仕様を並べ、
+  最後に検証カバレッジ（要件・メソッドのうちテスト未検証のギャップ）を集計する。
+-#}
+{% import "_house-style.html.j2" as ex %}
+{% set cases = store.items_of('test-case') %}
+{#- レベルの列挙順: 標準の 単体→結合→総合 を先に、拡張値（受入/性能等）を後ろに -#}
+{% set std_levels = ['単体', '結合', '総合'] %}
+{% set extra_levels = [] %}
+{% for c in cases %}
+{% if c.attrs.level not in std_levels and c.attrs.level not in extra_levels %}{% set _ = extra_levels.append(c.attrs.level) %}{% endif %}
+{% endfor %}
+{% set levels = std_levels + extra_levels %}
+{{ ex.page_start(doc.title) }}
+
+{# ---- 表紙 ---- #}
+{{ ex.cover(doc.title, doc.get('doc_no', ''), doc.get('version', ''),
+            generated_at[:10], doc.get('org', '')) }}
+
+{# ---- 改訂履歴 ---- #}
+{% call ex.sheet('改訂履歴', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{% if data_history %}
+{% set rows = [] %}
+{% for h in data_history %}
+{% set _ = rows.append({'version': loop.index, 'date': h.date,
+    'note': (h.subject ~ '：' if h.subject and not h.initial else '') ~ h.summary
+            ~ '（' ~ (h.short if h.short else '未コミット') ~ '）',
+    'author': h.author}) %}
+{% endfor %}
+{{ ex.rev_history(rows) }}
+{% else %}
+{{ ex.rev_history([{'version': doc.get('version', '1.0'), 'date': generated_at[:10],
+    'note': '初版（データ版 ' ~ data_rev ~ ' から自動生成）', 'author': 'contextdb'}]) }}
+{% endif %}
+{% endcall %}
+
+{# ---- 目次 ---- #}
+{% call ex.sheet('目次', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.toc([
+  {'no': '1', 'sheet': '1. テストケース一覧', 'desc': 'レベル・名称・検証対象（verifies）の一覧'},
+  {'no': '2', 'sheet': '2. テスト仕様',       'desc': 'レベルごとの前提・手順・期待結果・検証対象'},
+  {'no': '3', 'sheet': '3. 検証カバレッジ',   'desc': 'テストで検証されていない要件・メソッド（ギャップ）'},
+  {'no': '付録', 'sheet': '付録 出典一覧',     'desc': 'テストケースの出典'},
+]) }}
+{% endcall %}
+
+{# ---- 1. テストケース一覧 ---- #}
+{% call ex.sheet('1. テストケース一覧', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('1', 'テストケース一覧') }}
+{% set summary = [('テストケース総数', cases|length)] %}
+{% for l in levels %}{% set _ = summary.append((l ~ 'テスト', cases|selectattr('attrs.level', 'equalto', l)|list|length)) %}{% endfor %}
+{{ ex.kv(summary) }}
+<table class="xl">
+  <tr><th style="width:12%">テストID</th><th style="width:8%">レベル</th>
+      <th style="width:32%">名称</th><th>検証対象 (verifies)</th></tr>
+  {% for c in cases %}
+  {% set verified = store.relations_of('verifies', src=c.id)|map(attribute='dst')|map('item_label')|join('、') %}
+  <tr>
+    <td class="c">{{ c.attrs.test_id }}</td>
+    <td class="c">{{ c.attrs.level }}</td>
+    <td>{{ c.attrs.name }}</td>
+    <td>{{ verified or '—' }}</td>
+  </tr>
+  {% endfor %}
+  {% if not cases %}<tr><td colspan="4">テストケースは登録されていません。</td></tr>{% endif %}
+</table>
+{% endcall %}
+
+{# ---- 2. テスト仕様（レベルごとに前提・手順・期待結果・検証対象） ---- #}
+{% call ex.sheet('2. テスト仕様', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('2', 'テスト仕様') }}
+{% for level in levels %}
+{% set lv_cases = cases|selectattr('attrs.level', 'equalto', level)|list %}
+{% if lv_cases %}
+{{ ex.subsec('2.' ~ loop.index, level ~ 'テスト') }}
+<table class="xl">
+  <tr><th style="width:11%">テストID</th><th style="width:20%">名称</th>
+      <th style="width:19%">前提条件</th><th>テスト手順</th>
+      <th style="width:20%">期待結果</th><th style="width:15%">検証対象</th></tr>
+  {% for c in lv_cases %}
+  {% set verified = store.relations_of('verifies', src=c.id)|map(attribute='dst')|map('item_label')|join('、') %}
+  <tr>
+    <td class="c">{{ c.attrs.test_id }}</td>
+    <td>{{ c.attrs.name }}</td>
+    <td>{{ c.attrs.get('precondition', '—') }}</td>
+    <td>{{ c.attrs.steps }}</td>
+    <td>{{ c.attrs.expected }}</td>
+    <td>{{ verified or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endfor %}
+{% if not cases %}{{ ex.prose('テストケースは登録されていません。') }}{% endif %}
+{% endcall %}
+
+{# ---- 3. 検証カバレッジ（要件・メソッドのうちテスト未検証のもの＝ギャップ） ---- #}
+{% call ex.sheet('3. 検証カバレッジ', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('3', '検証カバレッジ') }}
+{% set reqs = store.items_of('requirement') %}
+{% set methods = store.items_of('method') %}
+{% set req_gaps = [] %}
+{% for r in reqs %}{% if not store.relations_of('verifies', dst=r.id) %}{% set _ = req_gaps.append(r) %}{% endif %}{% endfor %}
+{% set mth_gaps = [] %}
+{% for m in methods %}{% if not store.relations_of('verifies', dst=m.id) %}{% set _ = mth_gaps.append(m) %}{% endif %}{% endfor %}
+{{ ex.kv([('要件総数', reqs|length),
+          ('テストで検証された要件', reqs|length - req_gaps|length),
+          ('未検証の要件（ギャップ）', req_gaps|length),
+          ('メソッド総数', methods|length),
+          ('テストで検証されたメソッド', methods|length - mth_gaps|length),
+          ('未検証のメソッド（ギャップ）', mth_gaps|length)]) }}
+{% if req_gaps or mth_gaps %}
+<table class="xl">
+  <tr><th style="width:10%">種別</th><th style="width:16%">ID</th><th style="width:34%">名称</th><th>状況</th></tr>
+  {% for g in req_gaps %}
+  <tr class="st-review">
+    <td class="c">要件</td><td class="c">{{ g.attrs.req_id }}</td>
+    <td>{{ g.attrs.name }}〔{{ g.attrs.kind }}〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  {% endfor %}
+  {% for g in mth_gaps %}
+  <tr class="st-review">
+    <td class="c">メソッド</td><td class="c">{{ g.attrs.method_id }}</td>
+    <td><code>{{ g.attrs.signature }}</code></td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+{{ ex.prose('すべての要件・メソッドがテストで検証されています（検証ギャップなし）。') }}
+{% endif %}
+{% endcall %}
+
+{# ---- 付録 出典一覧 ---- #}
+{% call ex.sheet('付録 出典一覧', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('付録', '出典一覧') }}
+{% set rows = [] %}
+{% for c in cases %}
+{% if c.source %}{% set _ = rows.append({'name': c.label(mm), 'kind': mm.item_types[c.type].label,
+    'id': c.id, 'src': c.source}) %}{% endif %}
+{% endfor %}
+{% if rows %}{{ ex.appendix_sources(rows) }}{% else %}{{ ex.prose('出典の登録はありません。') }}{% endif %}
+{% endcall %}
+
+{{ ex.page_end() }}

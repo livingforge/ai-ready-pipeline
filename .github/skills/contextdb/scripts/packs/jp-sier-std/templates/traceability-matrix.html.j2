@@ -2,8 +2,9 @@
   jp-sier-std 要件・設計対応表（Excel 風 HTML・自動生成）
 
   基本設計書と体裁（_house-style）を揃えた納品用 HTML。非 abstract の台帳文書で
-  パラメータは任意。block 未使用のため block 規約の対象外。要件から詳細設計までの
-  V字トレースと、設計に落ちていない要件（カバレッジ・ギャップ）を機械的に一覧する。
+  パラメータは任意。block 未使用のため block 規約の対象外。要件からテストまでの
+  V字トレース（realizes/refines/has-method/verifies）と、設計に落ちていない要件
+  （カバレッジ・ギャップ）・テスト未検証の要件（検証ギャップ）を機械的に一覧する。
 -#}
 {% import "_house-style.html.j2" as ex %}
 {% set reqs = store.items_of('requirement') %}
@@ -33,8 +34,9 @@
 {# ---- 目次 ---- #}
 {% call ex.sheet('目次', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
 {{ ex.toc([
-  {'no': '1', 'sheet': '1. 要件・設計対応', 'desc': '要件→基本設計→詳細設計→メソッドの対応（V字トレース）'},
+  {'no': '1', 'sheet': '1. 要件・設計対応', 'desc': '要件→基本設計→詳細設計→メソッド→テストの対応（V字トレース）'},
   {'no': '2', 'sheet': '2. カバレッジ',     'desc': '設計に落ちていない要件（ギャップ）の集計'},
+  {'no': '3', 'sheet': '3. テスト検証',     'desc': 'テストで検証されていない要件（検証ギャップ）の集計'},
 ]) }}
 {% endcall %}
 
@@ -43,10 +45,11 @@
 {{ ex.sec('1', '要件・設計対応') }}
 <table class="xl">
   <tr>
-    <th style="width:26%">要件</th>
+    <th style="width:24%">要件</th>
     <th>実現する設計要素<br>(realizes)</th>
     <th>詳細化元の基本設計<br>(refines先)</th>
     <th>メソッド<br>(has-method)</th>
+    <th>検証するテスト<br>(verifies)</th>
     <th style="width:8%">状態</th>
   </tr>
   {% for r in reqs %}
@@ -57,11 +60,13 @@
   {% for rf in store.relations_of('refines', src=x.src) %}{% set _ = refined.append(rf.dst|item_label) %}{% endfor %}
   {% for hm in store.relations_of('has-method', src=x.src) %}{% set _ = methods.append(hm.dst|item_label) %}{% endfor %}
   {% endfor %}
+  {% set verifiers = store.relations_of('verifies', dst=r.id) %}
   <tr>
     <td>{{ r.attrs.req_id }}　{{ r.attrs.name }}〔{{ r.attrs.kind }}〕</td>
     <td>{% for x in realizers %}{{ x.src|item_label }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if not realizers %}—{% endif %}</td>
     <td>{{ refined|unique|list|join('、') or '—' }}</td>
     <td>{{ methods|unique|list|join('、') or '—' }}</td>
+    <td>{% for v in verifiers %}{{ v.src|item_label }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if not verifiers %}—{% endif %}</td>
     {% if realizers %}<td class="c st-approved">実現</td>{% else %}<td class="c st-review">ギャップ</td>{% endif %}
   </tr>
   {% endfor %}
@@ -91,6 +96,32 @@
 </table>
 {% else %}
 {{ ex.prose('すべての要件が設計に展開されています（カバレッジ・ギャップなし）。') }}
+{% endif %}
+{% endcall %}
+
+{# ---- 3. テスト検証（テストで検証されていない要件＝検証ギャップ） ---- #}
+{% call ex.sheet('3. テスト検証', doc.title, doc.get('doc_no', ''), doc.get('version', '')) %}
+{{ ex.sec('3', 'テスト検証') }}
+{% set vgaps = [] %}
+{% for r in reqs %}
+{% if not store.relations_of('verifies', dst=r.id) %}{% set _ = vgaps.append(r) %}{% endif %}
+{% endfor %}
+{{ ex.kv([('要件総数', reqs|length),
+          ('テストで検証されている', reqs|length - vgaps|length),
+          ('検証ギャップ', vgaps|length)]) }}
+{% if vgaps %}
+<table class="xl">
+  <tr><th style="width:14%">要件ID</th><th style="width:30%">要件名</th><th>状況</th></tr>
+  {% for g in vgaps %}
+  <tr class="st-review">
+    <td class="c">{{ g.attrs.req_id }}</td>
+    <td>{{ g.attrs.name }}〔{{ g.attrs.kind }}〕</td>
+    <td>verifies 関係なし（テスト未設計）</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+{{ ex.prose('すべての要件がテストで検証されています（検証ギャップなし）。') }}
 {% endif %}
 {% endcall %}
 

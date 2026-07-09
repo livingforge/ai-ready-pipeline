@@ -40,6 +40,26 @@
     location: { section: Excel 風 HTML }
     evidence: モジュール（クラス）/メソッドを refines・realizes 付きで列挙する（house-style 使用）
 
+- id: sp-test-spec
+  name: テスト仕様書テンプレート
+  file: test-spec.html.j2
+  role: document
+  status: review
+  source:
+    doc: contextdb/packs/jp-sier-std/templates/test-spec.html.j2
+    location: { section: Excel 風 HTML }
+    evidence: テストケースをレベル別に前提・手順・期待結果・verifies 付きで列挙し検証カバレッジを集計する（house-style 使用）
+
+- id: sp-test-result
+  name: テスト結果報告書テンプレート
+  file: test-result.html.j2
+  role: document
+  status: review
+  source:
+    doc: contextdb/packs/jp-sier-std/templates/test-result.html.j2
+    location: { section: Excel 風 HTML }
+    evidence: ケースごとの最新結果（executes）を集計し、レベル別実施サマリ・合格率と要件別合否を出す（house-style 使用）
+
 - id: sp-traceability-matrix
   name: 要件・設計対応表テンプレート
   file: traceability-matrix.html.j2
@@ -48,4 +68,4 @@
   source:
     doc: contextdb/packs/jp-sier-std/templates/traceability-matrix.html.j2
     location: { section: Excel 風 HTML }
-    evidence: 要件→設計→メソッドのトレースとカバレッジ・ギャップを一覧する（house-style 使用）
+    evidence: 要件→設計→メソッド→テストのトレースとカバレッジ・ギャップ・検証ギャップを一覧する（house-style 使用）

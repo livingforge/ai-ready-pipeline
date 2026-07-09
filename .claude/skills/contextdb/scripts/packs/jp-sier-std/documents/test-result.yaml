@@ -1,0 +1,4 @@
+# 機械生成（contextdb pack build）。正本は packs-src/jp-sier-std/items/doc-type/。直接編集しない。
+title: テスト結果報告書
+output: テスト結果報告書.html
+template: test-result.html.j2

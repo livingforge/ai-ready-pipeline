@@ -66,6 +66,20 @@ def consuming_project() -> Path:
           "- { type: refines, from: mod-0001, to: scr-0001, status: approved }\n")
     write(root, "relations/has-method.yaml",
           "- { type: has-method, from: mod-0001, to: mth-0001, status: approved }\n")
+    # テスト工程（V字右側）: 単体テスト tc-0001 が要件とメソッドを verifies で検証する。
+    write(root, "items/test-case/core.yaml",
+          "- { id: tc-0001, test_id: T-01, name: 顧客一覧の表示確認, level: 単体, "
+          "precondition: 顧客が登録済み, steps: 顧客一覧画面を開く, "
+          "expected: 登録済みの顧客が一覧に表示される, status: approved }\n")
+    write(root, "relations/verifies.yaml",
+          "- { type: verifies, from: tc-0001, to: req-0001, status: approved }\n"
+          "- { type: verifies, from: tc-0001, to: mth-0001, status: approved }\n")
+    # テスト実行結果（設計 test-case と分離）: tr-0001 が tc-0001 を実行し合格。
+    write(root, "items/test-run/core.yaml",
+          "- { id: tr-0001, run_id: R-01, result: 合格, executed_on: '2026-07-01', "
+          "tester: 田中, status: approved }\n")
+    write(root, "relations/executes.yaml",
+          "- { type: executes, from: tr-0001, to: tc-0001, status: approved }\n")
     return root
 
 
@@ -81,11 +95,11 @@ def test_pack_resolves_and_merges_clean():
     store, problems = load(root)
     assert [p.name for p in store.packs] == ["jp-sier-std"]
     assert not store.has_errors(), problems
-    # パックのドメイン種別（要件〜詳細設計の全工程）がマージされている
+    # パックのドメイン種別（要件〜詳細設計〜テスト設計/実行の全工程）がマージされている
     for t in ("requirement", "screen", "entity", "data-item", "business-rule",
-              "external-interface", "module", "method"):
+              "external-interface", "module", "method", "test-case", "test-run"):
         assert t in store.mm.item_types
-    for r in ("realizes", "refines", "has-method"):
+    for r in ("realizes", "refines", "has-method", "verifies", "executes"):
         assert r in store.mm.relation_types
 
 
@@ -181,8 +195,8 @@ def test_generates_all_documents():
     store = Store.load(root)
     packs = store.packs
     docs = dict(standard.collect_documents(root, packs, store.problems))
-    assert set(docs) == {"basic-design", "requirement-spec",
-                         "detail-design", "traceability-matrix"}
+    assert set(docs) == {"basic-design", "requirement-spec", "detail-design",
+                         "test-spec", "test-result", "traceability-matrix"}
     # abstract 基本設計書はパラメータ展開済み
     assert docs["basic-design"]["output"] == "基本設計書_受発注.html"
 
@@ -203,6 +217,87 @@ def test_generates_all_documents():
     # トレーサビリティ表に要件と実現の連鎖が出る
     assert "F-01" in rendered["traceability-matrix"]
     assert "CustomerListController" in rendered["traceability-matrix"]
+    # テスト仕様書にテストケースとレベル・期待結果が出る
+    assert "T-01" in rendered["test-spec"]
+    assert "顧客一覧の表示確認" in rendered["test-spec"]
+    assert "単体" in rendered["test-spec"]
+    # テスト結果報告書に実施サマリと最新結果（合格）が出る
+    assert "テスト実施サマリ" in rendered["test-result"]
+    assert "T-01" in rendered["test-result"]
+    assert "合格" in rendered["test-result"]
+    # V字右側（verifies）が対応表の要件行「検証するテスト」列に現れる
+    assert "顧客一覧の表示確認" in rendered["traceability-matrix"]
+
+
+def test_verifies_trace_and_coverage_gap():
+    """テスト工程: verifies が張れて検証を通り、未検証の要件は検証ギャップになる。"""
+    root = consuming_project()
+    # req-0002 は設計にも落ち、テストでも検証されない（検証ギャップ候補）
+    write(root, "items/requirement/core.yaml",
+          "- { id: req-0001, req_id: F-01, name: 顧客照会, kind: 機能, "
+          "statement: 顧客を一覧照会できる, status: approved }\n"
+          "- { id: req-0002, req_id: F-02, name: 顧客登録, kind: 機能, "
+          "statement: 顧客を登録できる, status: approved }\n")
+    write(root, "relations/realizes.yaml",
+          "- { type: realizes, from: scr-0001, to: req-0001, status: approved }\n"
+          "- { type: realizes, from: mod-0001, to: req-0001, status: approved }\n"
+          "- { type: realizes, from: mod-0001, to: req-0002, status: approved }\n")
+    store, problems = load(root)
+    assert not store.has_errors(), problems
+    # tc-0001 は req-0001 と mth-0001 を検証している
+    verified_reqs = {r.dst for r in store.relations_of("verifies", src="tc-0001")}
+    assert verified_reqs == {"req-0001", "mth-0001"}
+    # req-0001 は検証済み、req-0002 は未検証（検証ギャップ）
+    assert store.relations_of("verifies", dst="req-0001")
+    assert not store.relations_of("verifies", dst="req-0002")
+
+    packs = store.packs
+    docs = dict(standard.collect_documents(root, packs, store.problems))
+    env = make_env(store, standard.template_search_dirs(root, packs),
+                   standard.prefix_map(packs))
+    matrix = env.get_template(docs["traceability-matrix"]["template"]).render(
+        doc=docs["traceability-matrix"], store=store, mm=store.mm,
+        generated_at="2026-07-05T00:00:00+09:00", data_rev="r", data_history=[])
+    # テスト検証シートに未検証要件 F-02 が検証ギャップとして出る
+    assert "F-02" in matrix and "検証ギャップ" in matrix
+
+
+def test_executes_cardinality_requires_a_case():
+    """executes は from 多重度 1: どのケースも実行しない test-run は error。"""
+    root = consuming_project()
+    write(root, "items/test-run/core.yaml",
+          "- { id: tr-0001, run_id: R-01, result: 合格, executed_on: '2026-07-01', status: approved }\n"
+          "- { id: tr-9999, run_id: R-99, result: 合格, executed_on: '2026-07-02', status: approved }\n")
+    _store, problems = load(root)
+    # tr-9999 は executes を持たない → from 多重度 1 違反
+    assert any("tr-9999" in m and "executes" in m for m in problems)
+
+
+def test_latest_run_and_requirement_verdict():
+    """最新の test-run（実施日で決定）が結果一覧・要件別合否に反映される。"""
+    root = consuming_project()
+    # tc-0001 を 2 回実行: 先に不合格、後で合格 → 最新は合格
+    write(root, "items/test-run/core.yaml",
+          "- { id: tr-0001, run_id: R-01, result: 不合格, executed_on: '2026-07-01', "
+          "tester: 田中, defect: BUG-1, status: approved }\n"
+          "- { id: tr-0002, run_id: R-02, result: 合格, executed_on: '2026-07-05', "
+          "tester: 田中, status: approved }\n")
+    write(root, "relations/executes.yaml",
+          "- { type: executes, from: tr-0001, to: tc-0001, status: approved }\n"
+          "- { type: executes, from: tr-0002, to: tc-0001, status: approved }\n")
+    store, problems = load(root)
+    assert not store.has_errors(), problems
+    packs = store.packs
+    docs = dict(standard.collect_documents(root, packs, store.problems))
+    env = make_env(store, standard.template_search_dirs(root, packs),
+                   standard.prefix_map(packs))
+    report = env.get_template(docs["test-result"]["template"]).render(
+        doc=docs["test-result"], store=store, mm=store.mm,
+        generated_at="2026-07-09T00:00:00+09:00", data_rev="r", data_history=[])
+    # req-0001 は tc-0001（最新=合格）で検証されるので要件別判定が「合格」
+    assert "T-01：合格" in report
+    # 合格率 100.0% が実施サマリに出る（実施 1・合格 1）
+    assert "100.0%" in report
 
 
 def test_block_override_via_std_prefix():

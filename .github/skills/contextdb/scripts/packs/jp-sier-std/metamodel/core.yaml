@@ -6,7 +6,10 @@
 #   基本設計工程: screen（画面）/ entity（テーブル）/ data-item（データ項目）/
 #                 business-rule（業務ルール）/ external-interface（外部IF）
 #   詳細設計工程: module（モジュール/クラス）/ method（メソッド）
-# 工程間トレース: realizes（設計要素→要件）/ refines（詳細設計→基本設計）。
+#   テスト工程  : test-case（単体/結合/総合テストケース）/ test-run（テスト結果）
+# 工程間トレース: realizes（設計要素→要件）/ refines（詳細設計→基本設計）/
+#                 verifies（テスト→要件/メソッド/画面。V字の右側）/
+#                 executes（テスト結果→テストケース。設計と実行を分離）。
 version: 1
 
 item_types:
@@ -100,6 +103,38 @@ item_types:
       signature:   { kind: string, required: true, unique: true }
       description: { kind: string, required: true }
 
+  test-case:
+    label: テストケース
+    label_field: name
+    id_prefix: tc-
+    # テストケースは verifies の起点（from）。executes の終点（to）にもなるが、
+    # 未実行のケースは executes を持たないだけで error にはしない
+    # （テスト結果報告書が「未実施」として可視化する）。
+    attributes:
+      test_id:      { kind: string, required: true, unique: true }
+      name:         { kind: string, required: true }
+      # level は extensible: 消費側は受入/性能テスト等の区分を追加してよい
+      # （横断集計は標準外の値を「その他」に丸める）
+      level:        { kind: enum, values: [単体, 結合, 総合], extensible: true, required: true }
+      precondition: { kind: string }              # 前提条件
+      steps:        { kind: string, required: true }   # テスト手順
+      expected:     { kind: string, required: true }   # 期待結果
+
+  test-run:
+    label: テスト結果
+    label_field: run_id
+    id_prefix: tr-
+    # テスト結果は executes の起点（from）専用。実行 1 件 = 1 レコードで、
+    # 回帰は追記する（テスト設計 test-case と実行結果 test-run を分離する）。
+    attributes:
+      run_id:      { kind: string, required: true, unique: true }
+      # result は extensible: 消費側は 対象外/スキップ 等を追加してよい
+      result:      { kind: enum, values: [合格, 不合格, 保留], extensible: true, required: true }
+      executed_on: { kind: string, required: true }   # 実施日（ISO 日付）
+      tester:      { kind: string }                    # 実施者
+      defect:      { kind: string }                    # 不具合ID（不合格時）
+      note:        { kind: string }
+
 relation_types:
 
   has-column:
@@ -154,3 +189,16 @@ relation_types:
     from: module
     to: method
     ordered: true
+
+  verifies:
+    label: 検証する
+    from: test-case
+    to: [requirement, method, screen]
+    # cardinality は課さない: 未検証の要件/メソッドは error にせず、
+    # 対応表のテストカバレッジ・ギャップとして可視化する（realizes と対称）
+
+  executes:
+    label: 実行する
+    from: test-run
+    to: test-case
+    cardinality: { from: "1" }   # テスト結果 1 件は必ず 1 つのテストケースに紐づく
