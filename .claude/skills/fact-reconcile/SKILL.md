@@ -1,6 +1,6 @@
 ---
 name: fact-reconcile
-description: Reconcile extracted spec facts (facts.json) for semantic consistency before they become contextdb items: a deterministic blocking pass clusters duplicates, then an LLM adjudicates same-concept groups, flags contradictions (never auto-resolved), and proposes a canonical term map. Output is a review-only reconcile.json a human curates, then a deterministic contextdb mutate plan. LLM access reuses docsummary's provider/.env config (keys never printed). Use when asked to "名寄せ / 重複ファクトを統合 / 意味的な一貫性 / reconcile / dedupe facts". Needs extracted facts (docextract → docagent) and an LLM API key.
+description: "Reconcile extracted spec facts (facts.json) for semantic consistency before they become contextdb items: a deterministic blocking pass clusters duplicates, then an LLM adjudicates same-concept groups, flags contradictions (never auto-resolved), and proposes a canonical term map. Output is a review-only reconcile.json a human curates, then a deterministic contextdb mutate plan. LLM access reuses docsummary's provider/.env config (keys never printed). Use when asked to \"名寄せ / 重複ファクトを統合 / 意味的な一貫性 / reconcile / dedupe facts\". Needs extracted facts (docextract → docagent) and an LLM API key."
 license: MIT
 ---
 

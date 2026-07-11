@@ -161,6 +161,11 @@ def build_summary(args: argparse.Namespace) -> dict:
                     entry["sub_cost_known"] = entry.get("sub_cost_known", True) and (cost is not None)
                     entry["sub_msgs"] = entry.get("sub_msgs", 0) + 1
                     entry["sub_model"] = model
+                    # 内部ログ（meta.json 由来）の agentType を確実な種別として親呼び出しに
+                    # 逆伝播する。呼び出し側が subagent_type を省略していると親側は None
+                    # （"?"）になるため、こちらを優先して種別を確定・トークンと結合する。
+                    if ev.get("subagent_type"):
+                        entry["sub_type"] = ev["subagent_type"]
                     st = entry.setdefault("sub_tools", {})
                     for tu in ev["tool_uses"]:
                         st[tu["name"]] = st.get(tu["name"], 0) + 1
@@ -229,7 +234,11 @@ def _finalize(totals, by_model, by_project, by_day, by_agent, by_tool,
     for sid, s in sessions.items():
         for e in s["timeline"]:
             if e["tool"] in ("Agent", "Task"):
-                tt = e.get("subagent_type") or "?"
+                # 種別は内部ログ由来の sub_type（meta.json の agentType）を優先し、無ければ
+                # 呼び出し側の subagent_type にフォールバックする。こうすると calls/seconds
+                # と内部トークン（subtype_usage は agentType でキー化）が同じキーで結合され、
+                # 「subagent_type 省略で呼ばれた Agent」が "?"・コスト 0 に化けない。
+                tt = e.get("sub_type") or e.get("subagent_type") or "?"
                 sub_by_type[tt]["calls"] += 1
                 if e.get("seconds"):
                     sub_by_type[tt]["seconds"] += e["seconds"]

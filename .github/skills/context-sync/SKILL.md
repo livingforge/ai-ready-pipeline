@@ -1,6 +1,6 @@
 ---
 name: context-sync
-description: Sync implementation changes into .contextdb, the project's spec-as-data single source of truth: enumerate drift candidates, judge which are real spec changes, apply them as a reviewed mutate plan, pass machine validation (error 0), and regenerate the views. Use after implementing/changing/removing a feature, or when asked to "contextdb を更新 / 仕様データに反映 / context-sync". Run it as the final step of implementation work so the spec data never drifts behind the code.
+description: "Sync implementation changes into .contextdb, the project's spec-as-data single source of truth: enumerate drift candidates, judge which are real spec changes, apply them as a reviewed mutate plan, pass machine validation (error 0), and regenerate the views. Use after implementing/changing/removing a feature, or when asked to \"contextdb を更新 / 仕様データに反映 / context-sync\". Run it as the final step of implementation work so the spec data never drifts behind the code."
 ---
 
 # context-sync — 実装差分を .contextdb（設計データの正本）へ同期する
