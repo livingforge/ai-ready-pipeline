@@ -89,10 +89,10 @@ python .claude/skills/agent-usage/scripts report --agent copilot --workspace C:/
   `--workspace`（対象フォルダ）、`--workspace-id`（id 直指定）。未指定なら debug-logs を
   持つ全ワークスペースを対象にし、`by_project` は VS Code のワークスペースフォルダ名で分ける。
 - **コストは GitHub AI Credits（1 credit = $0.01）で表示する**。各 `llm_request` の
-  `attrs.copilotUsageNanoAiu`（内部は米ドル基準の AI Units。1 AIU ≒ $1・1e9 nano）が
-  **Copilot の実測消費**で、これを credit へ換算（÷1e7）して正本のコスト値にする。例:
-  Opus 4.8 の output $25/1M → 2,500 credit/1M。`models.json` の単価から算出した「推定
-  credit」は totals にクロスチェック用として併記する（`--pricing` は Copilot では使わない）。
+  `attrs.copilotUsageNanoAiu`（1 credit = 1 AIU = 1e9 nano）が **Copilot の実測消費**で、
+  これを ÷1e9 で credit に換算して正本のコスト値にする。`models.json` の単価は credit 単位
+  （例: Opus 4.8 の output は $25/1M = 2,500 credit/1M）。ここから算出した「推定 credit」と、
+  キャッシュ読込による「節約 credit」を totals に併記する（`--pricing` は Copilot では使わない）。
 - `child_session_ref` が指すタイトル生成・サブエージェントの子ログも読み、本体総計へ
   畳み込みつつ `subagents` に内訳を出す（Claude の sidechain 扱いと同じ）。
 

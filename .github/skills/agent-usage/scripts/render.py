@@ -229,9 +229,14 @@ def render_html(summary: dict, top: int = 100) -> str:
 # ---------------------------------------------------------------------------
 def _hero(t: dict) -> str:
     if _UNIT == "credit":
+        savings = float(t.get("cache_savings_usd") or 0)
         est = float(t.get("cost_estimated_aiu") or 0)
-        note = (f'単価から推定 <b>{_fmt_cost(est)}</b>（クロスチェック）'
-                if est else 'Copilot が記録した実測 AI Credits')
+        parts = []
+        if savings > 0:
+            parts.append(f'キャッシュにより <b>{_fmt_cost(savings)}</b> 節約済み')
+        if est:
+            parts.append(f'単価推定 <b>{_fmt_cost(est)}</b>（クロスチェック）')
+        note = ' ・ '.join(parts) or 'Copilot が記録した実測 AI Credits'
         return (
             '<div class="hero">'
             '<div class="hero-label">総消費 credit（実測）</div>'

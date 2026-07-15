@@ -97,13 +97,17 @@ def test_copilot_summary_aiu(tmp_path):
 
     assert s["agent"] == "copilot"
     assert s["cost_unit"] == "credit"
-    # 実測消費を credit（=内部 AIU×100, 1 credit=$0.01）で表示:
-    # session1 = opus(0.25→25)+child opus(0.02→2)=27, session2 = 0.25→25 → 52
-    assert s["totals"]["cost_usd"] == 52.0
+    # 実測消費を credit（1 credit = 1 AIU = 1e9 nano）で表示:
+    # session1 = opus(0.25)+child opus(0.02)=0.27, session2 = 0.25 → 0.52
+    assert s["totals"]["cost_usd"] == 0.52
     assert s["totals"]["sessions"] == 2
     # main/subagent 分割（child のみ subagent）
-    assert s["by_agent"]["subagent"]["cost_usd"] == 2.0
-    assert round(s["by_agent"]["main"]["cost_usd"], 2) == 50.0
+    assert s["by_agent"]["subagent"]["cost_usd"] == 0.02
+    assert round(s["by_agent"]["main"]["cost_usd"], 2) == 0.50
+    # キャッシュ節約 credit = cached ×(fresh入力単価 − cache単価)/batch を合算:
+    # 各 main セッション cached 8000 ×(3.75−1.5)/1e6 = 0.018、child cached 500 ×… = 0.001125
+    # 合計 0.018 + 0.001125 + 0.018 = 0.037125 → 0.0371
+    assert s["totals"]["cache_savings_usd"] == 0.0371
     # by_tool は main + 子ツールを合算（grep_search は子由来）
     tools = {t["tool"]: t for t in s["by_tool"]}
     assert tools["grep_search"]["calls"] == 1
@@ -125,6 +129,9 @@ def test_copilot_render_uses_credit(tmp_path):
     assert "GitHub Copilot" in html
     assert "credit" in html
     assert "総消費 credit（実測）" in html
+    # ヒーローにキャッシュ節約額（Claude 同様）が出る
+    assert "キャッシュにより" in html
+    assert "節約済み" in html
     # USD 記号がコスト表示に紛れ込まない（JS 内の非活性 USD 分岐は本文外）
     body = html.split("<script")[0]
     assert "$" not in body

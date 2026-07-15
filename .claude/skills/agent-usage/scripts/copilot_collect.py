@@ -14,9 +14,9 @@ inputTokens / outputTokens / cachedTokens と **実測 AIU（``copilotUsageNanoA
 1e9 nano）** が入っている。
 
 **コストは GitHub AI Credits（1 credit = $0.01）で表す**。消費量は ``copilotUsageNanoAiu``
-（内部は米ドル基準の AI Units。1 AIU ≒ $1・1e9 nano）に実測記録されるので、``NANO_PER_CREDIT``
-（÷1e7）で credit に換算してこれを正本のコスト値とし、``models.json`` の単価から算出した
-推定 credit は補助（クロスチェック）として併記する。
+（1 credit = 1 AIU = 1e9 nano）に実測記録されるので、``NANO_PER_AIU`` で割って credit に
+換算し、これを正本のコスト値とする。``models.json`` の単価から算出した推定 credit と、
+キャッシュ読込による節約 credit を補助（クロスチェック・削減効果）として併記する。
 
 サブエージェント（``child_session_ref`` が指す ``title-*.jsonl`` / 子セッションログ）は
 親セッションの ``main.jsonl`` と同じディレクトリに置かれ、``include_children`` で本体総計へ
@@ -38,10 +38,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import unquote
 
 NANO_PER_AIU = 1_000_000_000
-# コスト表示は GitHub AI Credits（1 credit = $0.01）で行う。``copilotUsageNanoAiu`` /
-# ``models.json`` の単価は米ドル基準（内部 1 AIU ≒ $1）なので、nano から credit へは
-# ÷1e7（= ÷NANO_PER_AIU ×100）で換算する。例: Opus 4.8 の output $25/1M → 2,500 credit/1M。
-NANO_PER_CREDIT = NANO_PER_AIU // 100  # 10_000_000
+# コスト表示は GitHub AI Credits（1 credit = $0.01）で行う。GitHub の実測
+# ``copilotUsageNanoAiu`` は 1 credit = 1 AIU = 1e9 nano で記録されるので、nano から
+# credit へは ÷NANO_PER_AIU で換算する（models.json の単価も credit 単位）。
 MAX_TIMELINE = 500  # 1 会話あたりのタイムライン最大イベント数（肥大化防止）
 
 
@@ -171,6 +170,21 @@ def estimate_all_cw_nano_aiu(
     return cache_write, per_batch_aiu * NANO_PER_AIU
 
 
+def cache_saving_nano(cached_tokens: int, price: Optional[Dict[str, float]]) -> float:
+    """キャッシュ読込で節約できた nano_aiu を返す。キャッシュが無ければ満額（フレッシュ入力
+    単価）で課金されるので、``cached_tokens ×（フレッシュ入力単価 − キャッシュ読込単価）`` が
+    節約分。フレッシュ入力単価は estimate_all_cw_nano_aiu と同じ選び方（cache_write_price>0
+    ならそれ、0 なら input_price）にする。単価不明・キャッシュ無しなら 0。"""
+    if not price or cached_tokens <= 0:
+        return 0.0
+    batch = price["batch_size"] or 1_000_000.0
+    fresh_input_price = (
+        price["cache_write_price"] if price["cache_write_price"] > 0 else price["input_price"]
+    )
+    saved_per_batch = cached_tokens * (fresh_input_price - price["cache_price"])
+    return max(0.0, saved_per_batch / batch) * NANO_PER_AIU
+
+
 # ---------------------------------------------------------------------------
 # JSONL 読み込み / セッションタイトル
 # ---------------------------------------------------------------------------
@@ -226,7 +240,7 @@ def load_session_title(session_dir: Path) -> Optional[str]:
 def _empty_model_bucket() -> Dict[str, Any]:
     return {"requests": 0, "inputTokens": 0, "outputTokens": 0, "cachedTokens": 0,
             "cacheWriteTokensEst": 0, "copilotUsageNanoAiu": 0, "estimatedNanoAiu": 0.0,
-            "hasPrice": False}
+            "savingsNanoAiu": 0.0, "hasPrice": False}
 
 
 def _empty_tool_bucket() -> Dict[str, Any]:
@@ -236,7 +250,7 @@ def _empty_tool_bucket() -> Dict[str, Any]:
 def _empty_agent_bucket() -> Dict[str, Any]:
     return {"requests": 0, "inputTokens": 0, "outputTokens": 0, "cachedTokens": 0,
             "cacheWriteTokensEst": 0, "copilotUsageNanoAiu": 0, "estimatedNanoAiu": 0.0,
-            "models": set()}
+            "savingsNanoAiu": 0.0, "models": set()}
 
 
 def _ingest_jsonl(main_path: Path, prices: Dict[str, Dict[str, float]],
@@ -301,6 +315,7 @@ def _ingest_jsonl(main_path: Path, prices: Dict[str, Dict[str, float]],
                 missing_prices.add(model)
             cache_write, est_nano = estimate_all_cw_nano_aiu(
                 input_tokens, output_tokens, cached_tokens, price)
+            saving_nano = cache_saving_nano(cached_tokens, price)
 
             m = per_model[model]
             m["requests"] += 1
@@ -310,6 +325,7 @@ def _ingest_jsonl(main_path: Path, prices: Dict[str, Dict[str, float]],
             m["cacheWriteTokensEst"] += cache_write
             m["copilotUsageNanoAiu"] += copilot_nano
             m["estimatedNanoAiu"] += est_nano
+            m["savingsNanoAiu"] += saving_nano
             m["hasPrice"] = m["hasPrice"] or (price is not None)
 
             agent_key = debug_name if source == "main" else f"{source}::{debug_name}"
@@ -321,6 +337,7 @@ def _ingest_jsonl(main_path: Path, prices: Dict[str, Dict[str, float]],
             a["cacheWriteTokensEst"] += cache_write
             a["copilotUsageNanoAiu"] += copilot_nano
             a["estimatedNanoAiu"] += est_nano
+            a["savingsNanoAiu"] += saving_nano
             a["models"].add(model)
             continue
 
@@ -368,7 +385,8 @@ def _fold_model(dst: Dict[str, Any], src: Dict[str, Dict[str, Any]]) -> None:
     for k, v in src.items():
         d = dst[k]
         for key in ("requests", "inputTokens", "outputTokens", "cachedTokens",
-                    "cacheWriteTokensEst", "copilotUsageNanoAiu", "estimatedNanoAiu"):
+                    "cacheWriteTokensEst", "copilotUsageNanoAiu", "estimatedNanoAiu",
+                    "savingsNanoAiu"):
             d[key] += v[key]
         d["hasPrice"] = d["hasPrice"] or v["hasPrice"]
 
@@ -447,7 +465,7 @@ def _summarize_session(session_dir: Path, emit_timeline: bool) -> Dict[str, Any]
                 "sub_msgs": sum(m["requests"] for m in cmodel.values()),
                 "sub_input": sum(m["inputTokens"] for m in cmodel.values()),
                 "sub_output": sum(m["outputTokens"] for m in cmodel.values()),
-                "sub_cost": sum(m["copilotUsageNanoAiu"] for m in cmodel.values()) / NANO_PER_CREDIT,
+                "sub_cost": sum(m["copilotUsageNanoAiu"] for m in cmodel.values()) / NANO_PER_AIU,
                 "sub_cost_known": True,
             })
 
@@ -501,7 +519,7 @@ def _add_model(bucket: Dict[str, Any], mb: Dict[str, Any]) -> None:
     bucket["output"] += mb["outputTokens"]
     bucket["cache_read"] += mb["cachedTokens"]
     bucket["cache_write"] += mb["cacheWriteTokensEst"]
-    bucket["cost_usd"] += mb["copilotUsageNanoAiu"] / NANO_PER_CREDIT
+    bucket["cost_usd"] += mb["copilotUsageNanoAiu"] / NANO_PER_AIU
 
 
 def _round_bucket(b: Dict[str, Any]) -> Dict[str, Any]:
@@ -563,6 +581,7 @@ def build_summary(args) -> dict:
 
     totals = _bucket()
     est_nano_total = 0.0
+    savings_nano_total = 0.0
     by_model: Dict[str, Dict[str, Any]] = defaultdict(_bucket)
     by_project: Dict[str, Dict[str, Any]] = defaultdict(_bucket)
     by_day: Dict[str, Dict[str, Any]] = defaultdict(_bucket)
@@ -605,6 +624,7 @@ def build_summary(args) -> dict:
             for mb in combined.values():
                 _add_model(totals, mb)
                 est_nano_total += mb["estimatedNanoAiu"]
+                savings_nano_total += mb["savingsNanoAiu"]
             totals["tool_calls"] += s["combined_tool_calls"]
             for name, mb in combined.items():
                 _add_model(by_model[name], mb)
@@ -631,7 +651,7 @@ def build_summary(args) -> dict:
                 st["input"] += b["input"]
                 st["output"] += b["output"]
                 st["seconds"] += b["seconds"]
-                st["cost_usd"] += b["reported_nano"] / NANO_PER_CREDIT
+                st["cost_usd"] += b["reported_nano"] / NANO_PER_AIU
 
             # 日次（セッション開始日にロールアップ）
             if sdt is not None:
@@ -654,7 +674,7 @@ def build_summary(args) -> dict:
                 for name, mb in sorted(combined.items(),
                                        key=lambda kv: kv[1]["copilotUsageNanoAiu"], reverse=True)
             ]
-            reported_credit = sum(mb["copilotUsageNanoAiu"] for mb in combined.values()) / NANO_PER_CREDIT
+            reported_credit = sum(mb["copilotUsageNanoAiu"] for mb in combined.values()) / NANO_PER_AIU
             conversations.append({
                 "session": s["session"],
                 "title": s["title"],
@@ -712,8 +732,8 @@ def build_summary(args) -> dict:
             "sessions": len(conversations),
             "duration_seconds": round(duration_total, 1),
             "active_seconds": round(active_total, 1),
-            "cache_savings_usd": 0.0,
-            "cost_estimated_aiu": round(est_nano_total / NANO_PER_CREDIT, 4),
+            "cache_savings_usd": round(savings_nano_total / NANO_PER_AIU, 4),
+            "cost_estimated_aiu": round(est_nano_total / NANO_PER_AIU, 4),
             "unknown_models": sorted(missing_models),
         },
         "by_model": _sorted_map(by_model, key="model"),
