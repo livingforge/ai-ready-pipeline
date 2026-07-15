@@ -17,6 +17,15 @@ def _fmt_int(n) -> str:
     return f"{int(n):,}"
 
 
+def _fmt_tok(n) -> str:
+    """トークン数の表記。100万（M）を超えたら M 表記（有効数字は小数点1桁）にし、
+    それ未満は桁区切りの整数のまま。例: 12,345,678 → 12.3M、987,654 → 987,654。"""
+    n = int(n)
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    return f"{n:,}"
+
+
 def _fmt_usd(n) -> str:
     return f"${float(n):,.2f}"
 
@@ -39,9 +48,15 @@ _UNIT = "USD"
 
 
 def _fmt_cost(n) -> str:
-    """コスト値を表示単位で整形。USD は $1,234.56、credit は 1,234.56 credit。"""
+    """コスト値を表示単位で整形。USD は $1,234.56。credit は桁数に応じて丸め、単位は
+    「cr」と略す（1000 未満は小数2桁、1000 以上は1桁、10000 以上は整数）。"""
     if _UNIT == "credit":
-        return f"{float(n):,.2f} credit"
+        n = float(n)
+        if n >= 10_000:
+            return f"{n:,.0f} cr"
+        if n >= 1_000:
+            return f"{n:,.1f} cr"
+        return f"{n:,.2f} cr"
     return _fmt_usd(n)
 
 
@@ -230,13 +245,10 @@ def render_html(summary: dict, top: int = 100) -> str:
 def _hero(t: dict) -> str:
     if _UNIT == "credit":
         savings = float(t.get("cache_savings_usd") or 0)
-        est = float(t.get("cost_estimated_aiu") or 0)
-        parts = []
         if savings > 0:
-            parts.append(f'キャッシュにより <b>{_fmt_cost(savings)}</b> 節約済み')
-        if est:
-            parts.append(f'単価推定 <b>{_fmt_cost(est)}</b>（クロスチェック）')
-        note = ' ・ '.join(parts) or 'Copilot が記録した実測 AI Credits'
+            note = f'キャッシュにより <b>{_fmt_cost(savings)}</b> 節約済み（推定）'
+        else:
+            note = 'Copilot が記録した実測 AI Credits'
         return (
             '<div class="hero">'
             '<div class="hero-label">総消費 credit（実測）</div>'
@@ -256,18 +268,21 @@ def _hero(t: dict) -> str:
 
 def _tiles(summary: dict, t: dict) -> str:
     tok_total = int(t["input"]) + int(t["output"])
+    # note は事前エスケープ済みの HTML 断片（<br> で改行を入れるため _esc は掛けない）。
     items = [
-        ("トークン", _fmt_int(tok_total), f'入力 {_fmt_int(t["input"])} / 出力 {_fmt_int(t["output"])}'),
+        ("トークン", _fmt_tok(tok_total),
+         f'入力 {_esc(_fmt_tok(t["input"]))}<br>出力 {_esc(_fmt_tok(t["output"]))}'),
         ("会話 / セッション", _fmt_int(summary.get("conversation_count", t["sessions"])),
-         f'{_fmt_int(t["messages"])} メッセージ'),
+         f'{_esc(_fmt_int(t["messages"]))} メッセージ'),
         ("ツール呼び出し", _fmt_int(t["tool_calls"]), ""),
         ("AI稼働時間", _fmt_dur(t.get("ai_active_seconds", 0)),
-         f'経過 {_fmt_dur(t["duration_seconds"])}・ツール実行時間 {_fmt_dur(t.get("active_seconds", 0))}'),
+         f'経過 {_esc(_fmt_dur(t["duration_seconds"]))}<br>'
+         f'ツール実行時間 {_esc(_fmt_dur(t.get("active_seconds", 0)))}'),
     ]
     return "".join(
         f'<div class="tile"><div class="t-label">{_esc(lbl)}</div>'
         f'<div class="t-value">{val}</div>'
-        + (f'<div class="t-note">{_esc(note)}</div>' if note else "")
+        + (f'<div class="t-note">{note}</div>' if note else "")
         + "</div>"
         for lbl, val, note in items
     )
@@ -636,8 +651,14 @@ _TEMPLATE = """<div class="wrap">
   const isAiu = (summary.cost_unit === 'credit');
 
   function formatUsd(n) {{
-    const s = parseFloat(n).toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
-    return isAiu ? (s + ' credit') : ('$' + s);
+    n = parseFloat(n);
+    if (isAiu) {{
+      const digits = (n >= 10000) ? 0 : (n >= 1000) ? 1 : 2;
+      const s = n.toLocaleString('en-US', {{minimumFractionDigits: digits, maximumFractionDigits: digits}});
+      return s + ' cr';
+    }}
+    const s = n.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+    return '$' + s;
   }}
 
   function formatUsdCompact(n) {{

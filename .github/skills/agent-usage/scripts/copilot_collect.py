@@ -266,6 +266,11 @@ def _ingest_jsonl(main_path: Path, prices: Dict[str, Dict[str, float]],
     vscode_version: Optional[str] = None
     child_refs: List[Dict[str, Any]] = []
     last_user_msg: Optional[str] = None
+    # AI 稼働時間の区間計算に使うマーク（ts_ms, "prompt"|"work"）。人間の user_message を
+    # ターンの起点、以降の AI 作業イベント（llm_request / tool_call / agent_response /
+    # turn_start / child_session_ref）を作業マークにする。呼び出し側は main のマークだけを
+    # 使う（子ログは親の壁時計に内包されるため二重計上しない）。
+    ai_marks: List[Tuple[int, str]] = []
 
     for entry in iter_jsonl(main_path):
         event_type = entry.get("type")
@@ -275,6 +280,11 @@ def _ingest_jsonl(main_path: Path, prices: Dict[str, Dict[str, float]],
         if isinstance(ts, int):
             first_ts = ts if first_ts is None else min(first_ts, ts)
             last_ts = ts if last_ts is None else max(last_ts, ts)
+            if event_type == "user_message":
+                ai_marks.append((ts, "prompt"))
+            elif event_type in ("llm_request", "tool_call", "agent_response",
+                                "turn_start", "child_session_ref"):
+                ai_marks.append((ts, "work"))
         attrs = entry.get("attrs") or {}
         if not isinstance(attrs, dict):
             attrs = {}
@@ -365,8 +375,28 @@ def _ingest_jsonl(main_path: Path, prices: Dict[str, Dict[str, float]],
     return {
         "firstTs": first_ts, "lastTs": last_ts, "sessionStartTs": session_start_ts,
         "copilotVersion": copilot_version, "vscodeVersion": vscode_version,
-        "childRefs": child_refs, "lastUserMsg": last_user_msg,
+        "childRefs": child_refs, "lastUserMsg": last_user_msg, "aiMarks": ai_marks,
     }
+
+
+def _ai_active_from_marks(marks: List[Tuple[int, str]]) -> float:
+    """AI 稼働時間（秒）を算出する。人間 user_message を起点、以降の AI 作業イベントを終点
+    候補として、ターンごとに「起点→そのターン最後の作業」区間長を合算する。応答完了から
+    次プロンプトまでの人間の空白は含めない。マークは (ts_ms, "prompt"|"work")。"""
+    total = 0.0
+    seg_start: Optional[int] = None   # 現ターンの起点（人間プロンプト時刻 ms）
+    last_work: Optional[int] = None   # 現ターンで最後に観測した作業時刻 ms
+    for ts, kind in sorted(marks, key=lambda m: m[0]):
+        if kind == "prompt":
+            if seg_start is not None and last_work is not None and last_work > seg_start:
+                total += (last_work - seg_start) / 1000.0
+            seg_start = ts
+            last_work = None
+        elif seg_start is not None:  # 作業（起点となるプロンプトがある場合のみ）
+            last_work = ts
+    if seg_start is not None and last_work is not None and last_work > seg_start:
+        total += (last_work - seg_start) / 1000.0
+    return total
 
 
 def _iso(ts_ms: Optional[int]) -> Optional[str]:
@@ -495,6 +525,7 @@ def _summarize_session(session_dir: Path, emit_timeline: bool) -> Dict[str, Any]
         "agent_calls": sum(b["calls"] for b in sub_by_label.values()),
         "first_ts": first_ts,
         "last_ts": last_ts,
+        "ai_active_seconds": _ai_active_from_marks(meta["aiMarks"]),
         "copilot_version": meta["copilotVersion"],
         "vscode_version": meta["vscodeVersion"],
         "timeline": timeline,
@@ -593,6 +624,7 @@ def build_summary(args) -> dict:
     missing_models: set = set()
     duration_total = 0.0
     active_total = 0.0
+    ai_active_total = 0.0
     first_all = last_all = None
     source_dirs: List[str] = []
     versions: set = set()
@@ -663,6 +695,7 @@ def build_summary(args) -> dict:
                         if (s["first_ts"] and s["last_ts"]) else 0.0)
             duration_total += duration
             active_total += s["main_tool_seconds"]
+            ai_active_total += s["ai_active_seconds"]
             if sdt is not None:
                 first_all = sdt if first_all is None else min(first_all, sdt)
                 last_end = _dt(s["last_ts"])
@@ -689,6 +722,7 @@ def build_summary(args) -> dict:
                 "cost_known": True,
                 "duration_seconds": round(duration, 1),
                 "active_seconds": round(s["main_tool_seconds"], 1),
+                "ai_active_seconds": round(s["ai_active_seconds"], 1),
                 "started": _iso(s["first_ts"]),
                 "timeline": s["timeline"],
                 "timeline_truncated": False,
@@ -732,6 +766,7 @@ def build_summary(args) -> dict:
             "sessions": len(conversations),
             "duration_seconds": round(duration_total, 1),
             "active_seconds": round(active_total, 1),
+            "ai_active_seconds": round(ai_active_total, 1),
             "cache_savings_usd": round(savings_nano_total / NANO_PER_AIU, 4),
             "cost_estimated_aiu": round(est_nano_total / NANO_PER_AIU, 4),
             "unknown_models": sorted(missing_models),
