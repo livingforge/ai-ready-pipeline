@@ -375,6 +375,144 @@ def test_send_reads_stdin_as_utf8_regardless_of_locale(store, tmp_path):
     assert shard["items"][0]["type"] == "業務ルール"
 
 
+# ── needs_vision: 画像分析待ちの自己申告キュー ──────────────────
+def test_send_needs_vision_flags_block_and_check_lists_it(store, tmp_path, capsys):
+    # fact-extractor が「関係が本文から確定できない」と申告 → vision マーカーを
+    # 書き、context-check が vision_pending として列挙する。バリア (complete/exit)
+    # には影響しない (done とは独立のキュー)。
+    doc_id = _register(store, tmp_path, "vis.xlsx", {"構成図": "Web AP DB が矢印で接続。"})
+    store("context-set", "--docs", doc_id, "--json")
+    capsys.readouterr()
+    block_id = f"{doc_id}.b01"
+    envelope = {
+        "block_id": block_id,
+        "items": [{"type": "用語", "statement": "Web: Webサーバ"}],
+        "needs_vision": {"reason": "矢印の向きが本文から不明", "range": "B2:L8"},
+    }
+    assert store("context-send", "--id", block_id,
+                 "--result", json.dumps(envelope, ensure_ascii=False), "--json") == 0
+    out = _out_json(capsys)
+    assert out["added"] == 1
+    assert out["needs_vision"]["reason"] == "矢印の向きが本文から不明"
+    assert out["needs_vision"]["range"] == "B2:L8"
+    # マーカーファイルが存在する (状態はファイル由来)
+    assert (tmp_path / "store" / "vision" / f"{block_id}.json").exists()
+    # check は complete=true (シャードあり=done) のまま、vision_pending を併記する
+    assert store("context-check", "--json") == 0
+    state = _out_json(capsys)
+    assert state["complete"] is True
+    assert [v["id"] for v in state["vision_pending"]] == [block_id]
+    assert state["vision_pending"][0]["range"] == "B2:L8"
+
+
+def test_resend_without_needs_vision_clears_the_flag(store, tmp_path, capsys):
+    # pass2 (画像付き再送) で関係が確定したら、needs_vision なしの再送でマーカーを
+    # 消して vision 待ちキューから外す (再送は冪等)。
+    doc_id = _register(store, tmp_path, "clr.xlsx", {"図": "ノードが線で接続。"})
+    store("context-set", "--docs", doc_id, "--json")
+    block_id = f"{doc_id}.b01"
+    flagged = {"block_id": block_id, "items": [{"type": "用語", "statement": "N: ノード"}],
+               "needs_vision": {"reason": "接続不明"}}
+    store("context-send", "--id", block_id,
+          "--result", json.dumps(flagged, ensure_ascii=False), "--json")
+    assert (tmp_path / "store" / "vision" / f"{block_id}.json").exists()
+    capsys.readouterr()
+    resolved = {"block_id": block_id,
+                "items": [{"type": "用語", "statement": "N: ノード (A→B と確定)"}]}
+    assert store("context-send", "--id", block_id,
+                 "--result", json.dumps(resolved, ensure_ascii=False), "--json") == 0
+    assert out_needs_none(_out_json(capsys))
+    assert not (tmp_path / "store" / "vision" / f"{block_id}.json").exists()
+    capsys.readouterr()
+    assert store("context-check", "--json") == 0
+    assert _out_json(capsys)["vision_pending"] == []
+
+
+def test_force_rebuild_clears_vision_markers(store, tmp_path, capsys):
+    # --force の作り直しは vision マーカーも消す (前回の申告が残らない)。
+    doc_id = _register(store, tmp_path, "fv.xlsx", {"s": "本文です。"})
+    store("context-set", "--docs", doc_id, "--json")
+    block_id = f"{doc_id}.b01"
+    store("context-send", "--id", block_id, "--result",
+          json.dumps({"block_id": block_id, "items": [], "needs_vision": True},
+                     ensure_ascii=False), "--json")
+    assert (tmp_path / "store" / "vision" / f"{block_id}.json").exists()
+    store("context-set", "--docs", doc_id, "--force", "--json")
+    assert not (tmp_path / "store" / "vision" / f"{block_id}.json").exists()
+
+
+def out_needs_none(o: dict) -> bool:
+    return o.get("needs_vision") in (None, False)
+
+
+def _fake_render(monkeypatch):
+    """render_range_png を差し替え、Excel を起動せずダミー PNG を書く。"""
+    import docextract.render as _render
+
+    def fake(src, sheet, cell_range, out, **kw):
+        Path(out).write_bytes(b"\x89PNG\r\n fake")
+        return str(out)
+
+    monkeypatch.setattr(_render, "render_range_png", fake)
+
+
+def test_context_render_images_pending_and_get_surfaces_them(store, tmp_path, capsys, monkeypatch):
+    # vision 待ちブロックの図面領域を画像化 → マーカーに記録 → context-get が
+    # pass2 入力として画像パスを返す、という統合ループを通す。
+    _fake_render(monkeypatch)
+    doc_id = _register(store, tmp_path, "net.xlsx", {"構成図": "Web AP DB が接続。"})
+    store("context-set", "--docs", doc_id, "--json")
+    block_id = f"{doc_id}.b01"
+    env = {"block_id": block_id,
+           "items": [{"type": "用語", "statement": "Web: Webサーバ"}],
+           "needs_vision": {"reason": "接続と向きが不明", "range": "B2:L8"}}
+    store("context-send", "--id", block_id,
+          "--result", json.dumps(env, ensure_ascii=False), "--json")
+    capsys.readouterr()
+
+    assert store("context-render", "--json") == 0
+    out = _out_json(capsys)
+    assert [r["id"] for r in out["rendered"]] == [block_id]
+    assert out["skipped"] == []
+    png = tmp_path / "store" / "vision" / f"{block_id}.png"
+    assert png.exists()  # ダミー PNG が書かれた
+    marker = json.loads(
+        (tmp_path / "store" / "vision" / f"{block_id}.json").read_text(encoding="utf-8")
+    )
+    assert marker["image"].endswith(f"{block_id}.png")
+
+    # context-get (pass2) が画像パスと理由を同梱する
+    capsys.readouterr()
+    assert store("context-get", "--id", block_id, "--json") == 0
+    got = _out_json(capsys)
+    assert got["image"].endswith(f"{block_id}.png")
+    assert got["vision_reason"] == "接続と向きが不明"
+    # check の vision_pending は「画像済」になる
+    capsys.readouterr()
+    store("context-check", "--json")
+    assert _out_json(capsys)["vision_pending"][0]["image"].endswith(f"{block_id}.png")
+
+
+def test_context_render_skips_non_excel_source(store, tmp_path, capsys, monkeypatch):
+    # Excel 以外のソースはレンダー対象外 (render は呼ばれない)。
+    import docextract.render as _render
+    monkeypatch.setattr(
+        _render, "render_range_png",
+        lambda *a, **k: pytest.fail("Excel 以外で render を呼んではいけない"),
+    )
+    doc_id = _register(store, tmp_path, "memo.pdf", {"p": "内容です。"})
+    store("context-set", "--docs", doc_id, "--json")
+    block_id = f"{doc_id}.b01"
+    store("context-send", "--id", block_id, "--result",
+          json.dumps({"block_id": block_id, "items": [], "needs_vision": True},
+                     ensure_ascii=False), "--json")
+    capsys.readouterr()
+    assert store("context-render", "--json") == 0
+    out = _out_json(capsys)
+    assert out["rendered"] == []
+    assert len(out["skipped"]) == 1 and "Excel 以外" in out["skipped"][0]["reason"]
+
+
 def test_send_envelope_without_block_id_is_accepted_with_warning(store, tmp_path, capsys):
     doc_id = _register(store, tmp_path, "nob.xlsx", {"s": "本文です。"})
     store("context-set", "--docs", doc_id, "--json")

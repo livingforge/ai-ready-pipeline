@@ -409,3 +409,75 @@ def test_node_carries_shape_id(tmp_path, make_xlsx):
     data = _extract(src, tmp_path / "out")
     node = _shapes(data)[0]
     assert node["location"]["shape_id"] == "2"
+
+
+def _diagram_heading(data):
+    return [
+        e
+        for e in data["elements"]
+        if e["type"] == "text" and e.get("style") == "diagram"
+    ]
+
+
+def test_diagram_group_bundles_inner_cell_and_shapes_in_order(tmp_path, make_xlsx):
+    # 図面領域の内側にあるセル注記が、図形と同じ構成図グループに畳み込まれ、
+    # シート冒頭のタイトル(図面外)は版面順でグループより前に来る。
+    src = make_xlsx(
+        sheets={
+            "構成図": [
+                ["ネットワーク構成図"],           # A1: 図面外のタイトル
+                [None, None, None],
+                [None, None, None],
+                [None, None, "凡例: Web-DB 接続"],  # C4: 図面内のセル注記 (col2,row3)
+            ]
+        },
+        shapes={
+            "構成図": [
+                # rect: (1,1)->(3,3) と (1,5)->(3,7)。dbbox=(1,1,3,7)
+                {"name": "Web", "text": "Webサーバ", "cell": (1, 1)},
+                {"name": "DB", "text": "DBサーバ", "cell": (1, 5)},
+            ]
+        },
+    )
+    data = _extract(src, tmp_path / "out")
+    els = data["elements"]
+
+    # 図面外のタイトルが先頭 (版面順で図面グループより前)
+    assert els[0]["content"] == "ネットワーク構成図"
+    # 直後に構成図グループの見出し
+    assert els[1].get("style") == "diagram"
+    assert els[1]["location"]["range"] == "B2:D8"  # dbbox=(1,1,3,7)
+    heading_i = 1
+
+    # 図面内のセル注記は畳み込まれ、図形テキストではない(style!=shape)
+    note = next(e for e in els if (e.get("content") or "").startswith("凡例"))
+    assert note.get("style") != "shape"
+    note_i = els.index(note)
+
+    # 見出しの後にセル注記→図形の順で連続する
+    shape_is = [i for i, e in enumerate(els) if e.get("style") == "shape"]
+    assert heading_i < note_i < min(shape_is)
+    assert {e["content"] for e in _shapes(data)} == {"Webサーバ", "DBサーバ"}
+    # 畳み込んだセルは独立した表として二重に出ない
+    assert _tables(data) == []
+
+
+def test_no_diagram_heading_without_shapes(tmp_path, make_xlsx):
+    # 図形の無いシートには構成図の見出しを出さない (回帰防止)
+    src = make_xlsx(sheets={"S": [["a", "b"], ["c", "d"]]})
+    data = _extract(src, tmp_path / "out")
+    assert _diagram_heading(data) == []
+
+
+def test_elements_ordered_by_position_across_types(tmp_path, make_xlsx, png_file):
+    # 画像と表が版面の (行,列) 順に並ぶ (型順ではない)
+    src = make_xlsx(
+        sheets={"S": [["表1"], [None], [None], [None], [None], ["表2下"]]},
+        image=("S", png_file, "A3"),  # 表1(row0) と 表2(row5) の間 (row2)
+    )
+    data = _extract(src, tmp_path / "out")
+    order = [
+        e.get("content") or e["type"]
+        for e in data["elements"]
+    ]
+    assert order == ["表1", "image", "表2下"]

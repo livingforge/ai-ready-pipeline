@@ -20,8 +20,12 @@
   ブロック抽出プロトコル (fact-batch が set/check、fact-extractor が get/send):
     context-set     文書群をブロック作業キューへ確定 (シート/ページ単位で結合・分割)
     context-get     次の未処理ブロックの本文+語彙をアトミックに払い出す (ID 自動割り当て)
-    context-send    抽出結果 [{type, statement, refs?}] をシャードへ保存 (→done)
-    context-check   done でないブロックを列挙 (facts-merge 前のバリア)
+    context-send    抽出結果 [{type, statement, refs?}] をシャードへ保存 (→done)。
+                    封筒に needs_vision を添えると画像分析待ちに登録する
+    context-check   done でないブロックを列挙 (facts-merge 前のバリア)。
+                    画像分析待ち (vision_pending) も併せて列挙する
+    context-render  vision 待ちブロックの図面領域を Excel COM で PNG 化し、
+                    画像パスをマーカーに記録する (context-get が pass2 へ渡す)
 
 すべてのサブコマンドは ``--json`` で機械可読な JSON を出力する
 (エージェントはこれをパースして次の操作を決める)。``--store`` で保存先を変更できる。
@@ -697,6 +701,10 @@ def cmd_context_get(args):
     block = queue.get(args.id)
     fs = _load_facts(args)  # 語彙 (item_types/rel_types) を同梱して追加コールを不要に
     hint = "ブロックが大きすぎます。context-set --max-chars を下げて作り直すか --stdout"
+    # 画像分析待ちで、既に図面領域がレンダリング済みなら画像パスを同梱する
+    # (pass2: エージェントが Read/viewImage で開いて関係を裁定するための入力)。
+    vinfo = queue.vision_info(block["id"]) or {}
+    image = vinfo.get("image")
     if args.json:
         remaining = sum(
             1 for b in queue.blocks if queue.status_of(b["id"]) == "pending"
@@ -713,24 +721,29 @@ def cmd_context_get(args):
             "rel_types": fs.rel_types,
             "remaining_pending": remaining,
         }
+        if image:
+            payload["image"] = image
+            payload["vision_reason"] = vinfo.get("reason")
         _emit(payload, True, lambda o: None, hint=hint)
         return
     # 既定: エージェント形式。抽出に要るものだけを出す — id (send で使う)・
     # 文脈 (source/units)・語彙・生の本文。location は server-side 付与なので
     # エージェントに渡さない。本文はエスケープ無しの生テキスト。
-    _print_guarded(
-        "\n".join(
-            [
-                f"id: {block['id']}",
-                f"source: {block['source']} | {', '.join(block['units'])}",
-                "types: " + ", ".join(fs.item_types),
-                "rels: " + ", ".join(fs.rel_types),
-                f"--- 本文 ({block['chars']}字) ---",
-                block["text"],
-            ]
-        ),
-        hint,
-    )
+    lines = [
+        f"id: {block['id']}",
+        f"source: {block['source']} | {', '.join(block['units'])}",
+        "types: " + ", ".join(fs.item_types),
+        "rels: " + ", ".join(fs.rel_types),
+    ]
+    if image:
+        # pass2: 図面領域の画像。Read/viewImage で開いて、本文で確定できなかった
+        # 関係 (接続・向き・ゾーン) を裁定する。確定できたら needs_vision を付けずに
+        # 再送する (マーカーが消えて vision 待ちから外れる)。
+        lines.append(f"image: {image}")
+        if vinfo.get("reason"):
+            lines.append(f"vision_reason: {vinfo['reason']}")
+    lines += [f"--- 本文 ({block['chars']}字) ---", block["text"]]
+    _print_guarded("\n".join(lines), hint)
 
 
 def cmd_context_send(args):
@@ -754,6 +767,7 @@ def cmd_context_send(args):
     # 形式的には正常なデータになり誰も気づけない。ペイロード側に出所を書かせ、
     # 不一致なら「シャードを作る前に」拒否することで必ず即時エラーにする。
     envelope_block_id = None
+    needs_vision = None
     if isinstance(payload, dict):
         if not isinstance(payload.get("items"), list):
             # object なら何でも通す実装にはしない ({} は従来どおりエラー)。
@@ -763,6 +777,9 @@ def cmd_context_send(args):
             )
         envelope_block_id = payload.get("block_id")
         items = payload["items"]
+        # 画像分析要求フラグ (帯域外メタ)。fact-extractor が「関係が本文から
+        # 確定できない」ブロックを自己申告する経路。facts 本体には混ぜない。
+        needs_vision = payload.get("needs_vision")
     elif isinstance(payload, list):
         items = payload
     else:
@@ -782,7 +799,8 @@ def cmd_context_send(args):
             file=sys.stderr,
         )
     result = queue.send(
-        args.id, items, args.item_types_file, args.rel_types_file
+        args.id, items, args.item_types_file, args.rel_types_file,
+        needs_vision=needs_vision,
     )
     result["block_id_verified"] = envelope_block_id is not None
     if args.json:
@@ -797,6 +815,9 @@ def cmd_context_send(args):
     if result["rejected"]:
         lines.append(f"rejected: {len(result['rejected'])}")
         lines += [f"  [{r['index']}] {r['reason']}" for r in result["rejected"]]
+    if result.get("needs_vision"):
+        reason = result["needs_vision"].get("reason")
+        lines.append("needs_vision: yes" + (f" ({reason})" if reason else ""))
     _print_guarded("\n".join(lines))
 
 
@@ -822,9 +843,65 @@ def cmd_context_check(args):
         if state["shards"]:
             lines.append("shards:")
             lines += [f"  {s}" for s in state["shards"]]
+        if state.get("vision_pending"):
+            lines.append("vision_pending:")
+            lines += [
+                f"  {v['id']}"
+                + (f" [{v['range']}]" if v.get("range") else "")
+                + (" 画像済" if v.get("image") else " 画像未")
+                + (f" {v['reason']}" if v.get("reason") else "")
+                for v in state["vision_pending"]
+            ]
         _print_guarded("\n".join(lines))
     # オーケストレータがバリアとして使えるよう、未完があれば非ゼロで返す。
     return 0 if state["complete"] else 3
+
+
+def cmd_context_render(args):
+    queue = ContextQueue.load(args.context)
+    lib = _load(args)
+    # 図面領域のレンダラは Excel COM (pywin32 任意依存)。呼び出し時にだけ要る
+    # ので遅延 import する (未導入でも他コマンドは動く)。
+    from docextract.render import render_range_png
+
+    pending = [
+        v for v in queue.check()["vision_pending"]
+        if args.force or not v.get("image")
+    ]
+    rendered: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for v in pending:
+        block = queue.find(v["id"])
+        doc = lib.find(block["doc_id"])
+        source = (doc or {}).get("source_abspath") or (doc or {}).get("source")
+        sheet = (block.get("location") or {}).get("sheet")
+        rng = v.get("range")  # エージェントのヒント。無ければシート全体を撮る
+        if not source or not sheet:
+            skipped.append({"id": v["id"], "reason": "ソースまたはシートが不明"})
+            continue
+        if not str(source).lower().endswith((".xlsx", ".xlsm")):
+            skipped.append({"id": v["id"], "reason": f"Excel 以外は未対応 ({source})"})
+            continue
+        out_png = str(queue.vision_path(v["id"]).with_suffix(".png"))
+        try:
+            render_range_png(source, sheet, rng, out_png)
+            queue.set_vision_image(v["id"], out_png)
+            rendered.append(
+                {"id": v["id"], "range": rng or "(シート全体)", "image": out_png.replace("\\", "/")}
+            )
+        except Exception as e:  # noqa: BLE001 Office 不在・COM 失敗はスキップして続行
+            skipped.append({"id": v["id"], "reason": str(e)})
+
+    payload = {"rendered": rendered, "skipped": skipped}
+
+    def human(o):
+        print(f"レンダリング: {len(o['rendered'])} 件 / スキップ {len(o['skipped'])} 件")
+        for r in o["rendered"]:
+            print(f"  {r['id']} [{r['range']}] -> {r['image']}")
+        for s in o["skipped"]:
+            print(f"  スキップ: {s['id']} ({s['reason']})")
+
+    _emit(payload, args.json, human)
 
 
 # ── 補助 ─────────────────────────────────────────────────────
@@ -1196,12 +1273,21 @@ def build_parser() -> argparse.ArgumentParser:
         '"to_ref":"F-02"}]} (refs は任意)。'
         ' 推奨は封筒形式 {"block_id":"<--id と同じ>","items":[…]} —'
         " block_id が --id と一致しないと送信せずエラーにする (取り違え検出)。"
-        " 裸の配列 [...] も受け付けるが突合は行わない",
+        " 裸の配列 [...] も受け付けるが突合は行わない。"
+        ' 封筒に "needs_vision":{"reason":"…","range":"B2:L8"} を添えると、'
+        " このブロックを画像分析待ちに登録する (関係が本文から確定できないとき"
+        " 自己申告する。context-check が vision_pending として列挙)",
     )
     sp.set_defaults(func=cmd_context_send)
 
     sp = add("context-check", "done でないブロックを列挙 (facts-merge 前のバリア)")
     sp.set_defaults(func=cmd_context_check)
+
+    sp = add("context-render", "vision 待ちブロックの図面領域を Excel COM で画像化する")
+    sp.add_argument(
+        "--force", action="store_true", help="画像が既にあっても撮り直す"
+    )
+    sp.set_defaults(func=cmd_context_render)
 
     return p
 

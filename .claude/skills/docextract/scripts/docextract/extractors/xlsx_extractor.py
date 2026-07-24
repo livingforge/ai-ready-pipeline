@@ -33,6 +33,18 @@ xl/drawings/drawingN.xml を直接パースし、図形テキストを TextEleme
 id で記録されるのでそれを使い、無ければコネクタ端点セルに最も近いノードを
 幾何的に対応付ける。復元したエッジは「接続元/接続先」の 2 列テーブル
 (location に kind="diagram_topology") として 1 シートにつき 1 つ出力する。
+
+要素は 1 シート内で **(行, 列) の出現位置順**に並べて出力する。セル・画像・
+図形を型ごとにまとめて出すと、同じネットワーク構成図を成すセルの注記と図形が
+本文上で「セルの塊」「図形の塊」に引き裂かれ、後段の fact 抽出が両者を無関係な
+断片として別々に数えてしまう (位置情報の消失)。座標は各要素がネイティブに
+持っている (セル=range、図形=アンカー矩形、画像=アンカーセル) ので、それを
+ソートキーにして本来の版面順を復元する。
+
+さらに、図形・コネクタの外接矩形 (図面領域) の内側に入るセルは、独立した表と
+してではなく**構成図グループ**へ畳み込む。1 グループは見出し → 図面内セル
+(凡例・注記) → 図形ノード → トポロジ表 の順の連続した要素列で、fact 抽出が
+構成図全体を 1 つのまとまりとして読めるようにする。
 """
 
 from __future__ import annotations
@@ -53,6 +65,10 @@ _GAP = 1
 # コネクタ端点をノードに幾何的にスナップする最大距離 (セル数、マンハッタン)。
 # これを超えて離れた端点はどのノードにも接続していないとみなし棄却する。
 _CXN_SNAP = 2
+
+# 構成図グループの先頭に置く見出し (fact 抽出が「ここからは 1 つの図」と
+# 認識できるようにする区切り)。図形テキストと区別するため style は "diagram"。
+_DIAGRAM_HEADING = "【図（構成図・フロー図）】"
 
 # OOXML 名前空間
 _NS = {
@@ -82,30 +98,22 @@ def extract_xlsx(path: Path, saver: ImageSaver) -> ExtractionResult:
 
     for ws in wb.worksheets:
         grid = _sheet_to_grid(ws)
+        drawing = drawings_by_sheet.get(ws.title)
+        dbbox = drawing.get("bbox") if drawing else None
+
+        # (行, 列) の版面順に出すため、要素を出現位置キー付きで集めてからソートする。
+        placed: list[tuple[tuple[int, int], list]] = []
+        # 図面領域 (dbbox) の内側に入るセルは独立した表にせず構成図グループへ畳み込む。
+        folded: list[tuple[tuple[int, int], object]] = []
+
         for top, left, bottom, right in _find_table_regions(grid):
             rows = _region_to_rows(grid, top, left, bottom, right)
-            if len(rows) == 1 and len(rows[0]) == 1:
-                # 孤立セルはタイトル・ラベル・注記であって表ではない
-                result.elements.append(
-                    TextElement(
-                        content=rows[0][0],
-                        location={
-                            "sheet": ws.title,
-                            "cell": f"{_col_letter(left + 1)}{top + 1}",
-                        },
-                    )
-                )
-                continue
-            cell_range = (
-                f"{_col_letter(left + 1)}{top + 1}:"
-                f"{_col_letter(right + 1)}{bottom + 1}"
-            )
-            result.elements.append(
-                TableElement(
-                    rows=rows,
-                    location={"sheet": ws.title, "range": cell_range},
-                )
-            )
+            el = _region_element(ws.title, rows, top, left, bottom, right)
+            if dbbox and _rect_contained((left, top, right, bottom), dbbox):
+                folded.append(((top, left), el))
+            else:
+                placed.append(((top, left), [el]))
+
         for img in getattr(ws, "_images", []):
             try:
                 data = img._data()
@@ -113,36 +121,111 @@ def extract_xlsx(path: Path, saver: ImageSaver) -> ExtractionResult:
                 continue
             ext = getattr(img, "format", None) or "png"
             rel_path = saver.save(data, str(ext))
-            result.elements.append(
-                ImageElement(
-                    file=rel_path,
-                    format=str(ext).lower(),
-                    location={"sheet": ws.title, "anchor": _anchor_cell(img)},
+            placed.append(
+                (
+                    _anchor_rowcol(img),
+                    [
+                        ImageElement(
+                            file=rel_path,
+                            format=str(ext).lower(),
+                            location={"sheet": ws.title, "anchor": _anchor_cell(img)},
+                        )
+                    ],
                 )
             )
-        drawing = drawings_by_sheet.get(ws.title)
-        if not drawing:
-            continue
-        for node in drawing["nodes"]:
-            loc: dict[str, str] = {"sheet": ws.title}
-            if node["cell"]:
-                loc["cell"] = node["cell"]
-            if node["name"]:
-                loc["shape_name"] = node["name"]
-            if node["id"]:
-                loc["shape_id"] = node["id"]
-            result.elements.append(
-                TextElement(content=node["text"], style="shape", location=loc)
-            )
-        if drawing["edges"]:
-            result.elements.append(
-                TableElement(
-                    rows=[["接続元", "接続先"]]
-                    + [[e["src"], e["dst"]] for e in drawing["edges"]],
-                    location={"sheet": ws.title, "kind": "diagram_topology"},
-                )
-            )
+
+        if drawing and (drawing["nodes"] or drawing["edges"] or folded):
+            # グループ全体を図面領域の左上に置き、周囲のセルと版面順で並ぶようにする。
+            key = (dbbox[1], dbbox[0]) if dbbox else (0, 0)
+            placed.append((key, _build_diagram_group(ws.title, drawing, folded, dbbox)))
+
+        placed.sort(key=lambda p: p[0])
+        for _, els in placed:
+            result.elements.extend(els)
     return result
+
+
+def _region_element(
+    sheet: str, rows: list[list[str]], top: int, left: int, bottom: int, right: int
+):
+    """セル領域を要素化する。孤立セル (1x1) はテキスト、それ以外は表。"""
+    if len(rows) == 1 and len(rows[0]) == 1:
+        # 孤立セルはタイトル・ラベル・注記であって表ではない
+        return TextElement(
+            content=rows[0][0],
+            location={"sheet": sheet, "cell": f"{_col_letter(left + 1)}{top + 1}"},
+        )
+    cell_range = (
+        f"{_col_letter(left + 1)}{top + 1}:{_col_letter(right + 1)}{bottom + 1}"
+    )
+    return TableElement(rows=rows, location={"sheet": sheet, "range": cell_range})
+
+
+def _build_diagram_group(
+    sheet: str, drawing: dict, folded: list[tuple[tuple[int, int], object]], dbbox
+) -> list:
+    """構成図を成すセル・図形・トポロジを 1 グループの連続した要素列にまとめる。
+
+    見出し → 図面内セル (凡例・注記、位置順) → 図形ノード → トポロジ表 の順。
+    見出しは図面領域全体を location.range に持ち、fact 抽出が構成図を 1 つの
+    まとまりとして読めるようにする。
+    """
+    loc: dict[str, str] = {"sheet": sheet}
+    if dbbox:
+        loc["range"] = (
+            f"{_col_letter(dbbox[0] + 1)}{dbbox[1] + 1}:"
+            f"{_col_letter(dbbox[2] + 1)}{dbbox[3] + 1}"
+        )
+    els: list = [TextElement(content=_DIAGRAM_HEADING, style="diagram", location=loc)]
+    for _, el in sorted(folded, key=lambda p: p[0]):
+        els.append(el)
+    for node in drawing["nodes"]:
+        nloc: dict[str, str] = {"sheet": sheet}
+        if node["cell"]:
+            nloc["cell"] = node["cell"]
+        if node["name"]:
+            nloc["shape_name"] = node["name"]
+        if node["id"]:
+            nloc["shape_id"] = node["id"]
+        els.append(TextElement(content=node["text"], style="shape", location=nloc))
+    if drawing["edges"]:
+        els.append(
+            TableElement(
+                rows=[["接続元", "接続先"]]
+                + [[e["src"], e["dst"]] for e in drawing["edges"]],
+                location={"sheet": sheet, "kind": "diagram_topology"},
+            )
+        )
+    return els
+
+
+def _rect_contained(inner: tuple[int, int, int, int], outer) -> bool:
+    """矩形 inner (c0,r0,c1,r1) が outer に完全に含まれるか。"""
+    ic0, ir0, ic1, ir1 = inner
+    oc0, or0, oc1, or1 = outer
+    return ic0 >= oc0 and ir0 >= or0 and ic1 <= oc1 and ir1 <= or1
+
+
+def _union_rect(rects) -> tuple[int, int, int, int] | None:
+    """矩形群 (None 混在可) の外接矩形。空なら None。"""
+    rects = [r for r in rects if r]
+    if not rects:
+        return None
+    return (
+        min(r[0] for r in rects),
+        min(r[1] for r in rects),
+        max(r[2] for r in rects),
+        max(r[3] for r in rects),
+    )
+
+
+def _anchor_rowcol(img) -> tuple[int, int]:
+    """画像アンカーの (行, 列) を 0 始まりで返す (読めなければ原点)。"""
+    try:
+        anc = img.anchor._from
+        return (anc.row, anc.col)
+    except Exception:
+        return (0, 0)
 
 
 def _cell_to_str(v) -> str:
@@ -258,8 +341,10 @@ def _extract_drawing_shapes(
 
     openpyxl は drawing の <xdr:sp>/<xdr:cxnSp> を読まないため、xlsx (zip) 内の
     xl/drawings/drawingN.xml を直接パースする。戻り値は
-    {シート名: {"nodes": [dict, ...], "edges": [dict, ...]}}。
+    {シート名: {"nodes": [dict, ...], "edges": [dict, ...], "bbox": rect|None}}。
     nodes の各要素は {"id","name","text","cell"}、edges は {"src","dst","name"}。
+    bbox は図形・コネクタの外接矩形 (c0,r0,c1,r1) で、図面領域内のセルを構成図
+    グループへ畳み込む判定と、グループの版面位置に使う。
     """
     drawings: dict[str, dict] = {}
     try:
@@ -279,13 +364,14 @@ def _extract_drawing_shapes(
                         part=drawing_part,
                     )
                     continue
-                nodes, edges = _parse_drawing(root)
+                nodes, edges, bbox = _parse_drawing(root)
                 if nodes or edges:
                     bucket = drawings.setdefault(
-                        sheet_title, {"nodes": [], "edges": []}
+                        sheet_title, {"nodes": [], "edges": [], "bbox": None}
                     )
                     bucket["nodes"].extend(nodes)
                     bucket["edges"].extend(edges)
+                    bucket["bbox"] = _union_rect([bucket["bbox"], bbox])
     except (zipfile.BadZipFile, OSError):
         # zip として開けない (壊れている等) 場合は図形抽出のみ諦める。
         # セル・画像側の抽出は既に完了しているので握り潰さず記録する。
@@ -349,13 +435,14 @@ def _rels_map(data: bytes, by_type: str | None = None) -> dict[str, str]:
     return out
 
 
-def _parse_drawing(root) -> tuple[list[dict], list[dict]]:
-    """drawing XML からノード (テキスト図形) と接続 (コネクタ由来) を組み立てる。
+def _parse_drawing(root) -> tuple[list[dict], list[dict], tuple[int, int, int, int] | None]:
+    """drawing XML からノード (テキスト図形)・接続 (コネクタ由来)・図面領域を組み立てる。
 
     テキストのある <xdr:sp> をノードとし、<xdr:cxnSp> の各端点を接続先ノードに
     解決してエッジにする。端点は明示接続 (<a:stCxn>/<a:endCxn> の id) を最優先し、
     無ければ端点セルに最も近いノードへ幾何的に対応付ける。グループ (<xdr:grpSp>)
-    内の図形・コネクタも子孫探索で拾う。
+    内の図形・コネクタも子孫探索で拾う。第 3 戻り値はノード・コネクタの外接矩形
+    (図面領域。図面内セルの畳み込みとグループ配置に使う)。
     """
     sp_tag = "{%s}sp" % _NS["xdr"]
     cxn_tag = "{%s}cxnSp" % _NS["xdr"]
@@ -400,10 +487,12 @@ def _parse_drawing(root) -> tuple[list[dict], list[dict]]:
         edges.append(
             {"src": _node_label(src), "dst": _node_label(dst), "name": c["name"]}
         )
+    # 図面領域 = ノード・コネクタの外接矩形 (rect を落とす前に求める)。
+    bbox = _union_rect([n["rect"] for n in nodes] + [c["rect"] for c in connectors])
     # 公開しない内部キー (rect) を落とす。
     for n in nodes:
         n.pop("rect", None)
-    return nodes, edges
+    return nodes, edges, bbox
 
 
 def _node_label(node: dict) -> str:

@@ -26,6 +26,19 @@ LEGACY_EXTS = [".xls", ".doc", ".ppt"]
 APP_BY_EXT = {".xls": "Excel", ".doc": "Word", ".ppt": "PowerPoint"}
 
 
+@pytest.fixture
+def _no_pywin32(monkeypatch):
+    """pywin32 が導入済みの環境でも「不在」を再現する。
+
+    fail-closed 経路 (pywin32 が無いとき明確なエラーで止まる) の検証が、実行環境に
+    pywin32 が入っているかどうかに左右されないようにする。``sys.modules`` に None を
+    差し込むと ``import pythoncom`` / ``import win32com.client`` が ImportError になり、
+    ``_require_win32com`` の未導入経路を決定論的に踏める。
+    """
+    for name in ("pythoncom", "win32com", "win32com.client"):
+        monkeypatch.setitem(sys.modules, name, None)
+
+
 def test_legacy_formats_are_registered():
     for ext in LEGACY_EXTS:
         assert ext in docextract.SUPPORTED_EXTENSIONS
@@ -33,7 +46,7 @@ def test_legacy_formats_are_registered():
 
 
 @pytest.mark.parametrize("ext", LEGACY_EXTS)
-def test_fail_closed_message_names_office_and_pywin32(ext, tmp_path):
+def test_fail_closed_message_names_office_and_pywin32(ext, tmp_path, _no_pywin32):
     """pywin32 不在時、Office 必須である旨と回避策を含むエラーで停止する。"""
     extractor = docextract.available_extractors()[ext]
     with pytest.raises(OfficeUnavailableError) as ei:
@@ -48,7 +61,7 @@ def test_fail_closed_message_names_office_and_pywin32(ext, tmp_path):
 
 
 @pytest.mark.parametrize("ext", LEGACY_EXTS)
-def test_office_unavailable_is_runtime_error(ext, tmp_path):
+def test_office_unavailable_is_runtime_error(ext, tmp_path, _no_pywin32):
     """OfficeUnavailableError は RuntimeError の一種 (CLI の失敗捕捉で拾える)。"""
     assert issubclass(OfficeUnavailableError, RuntimeError)
     extractor = docextract.available_extractors()[ext]
@@ -56,7 +69,7 @@ def test_office_unavailable_is_runtime_error(ext, tmp_path):
         extractor(Path("dummy" + ext), ImageSaver(tmp_path))
 
 
-def test_import_failure_message_names_install_command(tmp_path):
+def test_import_failure_message_names_install_command(tmp_path, _no_pywin32):
     """pywin32 不在時のメッセージは自動導入されない旨と実コマンドを案内する。"""
     extractor = docextract.available_extractors()[".xls"]
     with pytest.raises(OfficeUnavailableError) as ei:

@@ -244,6 +244,45 @@ class ContextQueue:
     def claim_path(self, block_id: str) -> Path:
         return self.path.parent / "claims" / f"{block_id}.claim"
 
+    def vision_info(self, block_id: str) -> dict[str, Any] | None:
+        """vision マーカーの中身を返す (無ければ None)。"""
+        vpath = self.vision_path(block_id)
+        if not vpath.exists():
+            return None
+        try:
+            return json.loads(vpath.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def set_vision_image(self, block_id: str, image: str | Path) -> dict[str, Any]:
+        """既存の vision マーカーに、レンダリング済み画像パスを書き込む。
+
+        context-render (オーケストレータ) が図面領域を PNG 化した後に呼ぶ。
+        マーカーが無い (flag されていない) ブロックには何もしない。
+        """
+        info = self.vision_info(block_id)
+        if info is None:
+            raise DocAgentError(
+                f"ブロック '{block_id}' は vision 待ちではありません"
+                " (needs_vision マーカーがありません)"
+            )
+        info["image"] = str(image).replace("\\", "/")
+        vpath = self.vision_path(block_id)
+        vpath.parent.mkdir(parents=True, exist_ok=True)
+        vpath.write_text(
+            json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        return info
+
+    def vision_path(self, block_id: str) -> Path:
+        """画像分析要求マーカーのパス。存在 = このブロックは vision 昇格待ち。
+
+        進捗 (claim/シャード) と同じく context.json には保存せず、ファイルの
+        有無で状態を導出する。テキストの抽出結果 (シャード) とは別の帯域外メタ
+        なので、facts 本体を汚さずに機械列挙できるキューになる。
+        """
+        return self.path.parent / "vision" / f"{block_id}.json"
+
     def status_of(self, block_id: str) -> str:
         """ブロックの状態をファイルシステムから導出する (context.json は見ない)。
 
@@ -273,10 +312,17 @@ class ContextQueue:
         return True
 
     def check(self) -> dict[str, Any]:
-        """done でないブロックを列挙する (facts-merge 前のバリア)。"""
+        """done でないブロックを列挙する (facts-merge 前のバリア)。
+
+        併せて **画像分析待ち (vision_pending)** も列挙する。これは done とは独立の
+        キューで、pass1 (テキスト) で fact-extractor が「関係が本文から確定できない」
+        と自己申告したブロック。バリア (complete/exit code) には影響させず、後段の
+        vision 再処理オーケストレータが消費する情報として返す。
+        """
         by_status = {s: 0 for s in _STATUSES}
         incomplete = []
         shards = []
+        vision_pending = []
         for b in self.blocks:
             status = self.status_of(b["id"])
             by_status[status] = by_status.get(status, 0) + 1
@@ -286,12 +332,24 @@ class ContextQueue:
                 incomplete.append(
                     {"id": b["id"], "status": status, "units": b["units"]}
                 )
+            info = self.vision_info(b["id"])
+            if info is not None:
+                vision_pending.append(
+                    {
+                        "id": b["id"],
+                        "units": b["units"],
+                        "reason": info.get("reason"),
+                        "range": info.get("range"),
+                        "image": info.get("image"),
+                    }
+                )
         return {
             "total": len(self.blocks),
             "by_status": by_status,
             "complete": not incomplete,
             "incomplete": incomplete,
             "shards": shards,
+            "vision_pending": vision_pending,
         }
 
     # ── 操作 ──────────────────────────────────────────────────
@@ -340,10 +398,15 @@ class ContextQueue:
                 "本文が空です)。対象の指定 (--files/--folder/--docs) を見直してください"
             )
         # 進捗はファイルの有無で導出するため、作り直し時は前回の痕跡を消して
-        # 全ブロックを pending に戻す (残った claim/シャードが done に見えないように)。
+        # 全ブロックを pending に戻す (残った claim/シャード/vision マーカーが
+        # done・vision待ちに見えないように)。
         claims_dir = path.parent / "claims"
         if claims_dir.exists():
             for f in claims_dir.glob("*.claim"):
+                f.unlink()
+        vision_dir = path.parent / "vision"
+        if vision_dir.exists():
+            for f in vision_dir.glob("*.json"):
                 f.unlink()
         for b in queue.blocks:
             shard = queue.shard_path(b["id"])
@@ -363,7 +426,10 @@ class ContextQueue:
         """
         if block_id is not None:
             block = self.find(block_id)
-            if self.status_of(block_id) == "done":
+            # done でも **vision 待ち (マーカーあり)** なら pass2 の再取得を許す
+            # (画像付きで関係を裁定し、needs_vision なしで再送するため)。マーカーが
+            # 無い通常の done は従来どおり拒否する。
+            if self.status_of(block_id) == "done" and self.vision_info(block_id) is None:
                 raise DocAgentError(
                     f"ブロック '{block_id}' は処理済み (done) です。未完の一覧は"
                     " context-check --json。全体を作り直すなら context-set --force"
@@ -391,6 +457,7 @@ class ContextQueue:
         items: list[dict[str, Any]],
         item_types_path: str | Path | None,
         rel_types_path: str | Path | None,
+        needs_vision: Any = None,
     ) -> dict[str, Any]:
         """抽出結果をブロック専用シャードへ保存し、ブロックを done にする。
 
@@ -399,6 +466,11 @@ class ContextQueue:
         不正な refs はその項目だけ拒否し、有効分は受理する (全体を止めない)。
         done への遷移はシャードファイルの存在そのもので表す (context.json は
         書き換えない)。
+
+        ``needs_vision`` が真なら、このブロックを画像分析待ちとしてマーカー
+        (``vision/<block_id>.json``) に記録する。dict なら ``reason``/``range``
+        を控える。偽なら既存マーカーを消す — pass2 (画像付き再送) で関係が
+        確定したら再送時に消えるようにして、再送を冪等に保つ。
         """
         block = self.find(block_id)
         self._try_claim(block_id)  # get を飛ばした send も claim を残す (状態の一貫性)
@@ -431,6 +503,22 @@ class ContextQueue:
                     }
                 )
         fs.save()  # シャードの存在 = done (これ以外の状態書き込みはしない)
+        # 画像分析要求フラグ (帯域外メタ)。真なら記録、偽なら既存を消す (冪等)。
+        vpath = self.vision_path(block_id)
+        marker: dict[str, Any] | None = None
+        if needs_vision:
+            marker = {"block_id": block_id, "at": _now()}
+            if isinstance(needs_vision, dict):
+                for k in ("reason", "range"):
+                    if needs_vision.get(k):
+                        marker[k] = needs_vision[k]
+            vpath.parent.mkdir(parents=True, exist_ok=True)
+            vpath.write_text(
+                json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        elif vpath.exists():
+            vpath.unlink()
         by_type: dict[str, int] = {}
         for it in added:
             by_type[it["type"]] = by_type.get(it["type"], 0) + 1
@@ -440,6 +528,7 @@ class ContextQueue:
             "added": len(added),
             "by_type": by_type,
             "rejected": rejected,
+            "needs_vision": marker,
         }
 
 
